@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "parshred",
+  "version": "0.1.0",
+  "description": "High-performance SIMD-accelerated XML parser for C++20",
+  "homepage": "https://github.com/parshred/parshred",
+  "license": "AGPL-3.0-or-later",
+  "supports": "!uwp",
+  "dependencies": []
+}

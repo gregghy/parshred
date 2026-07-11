@@ -11,7 +11,7 @@ Get up and running with parshred XML parsing in under five minutes.
 ```cmake
 include(FetchContent)
 FetchContent_Declare(parshred
-    GIT_REPOSITORY https://github.com/yourorg/parshred.git
+    GIT_REPOSITORY https://github.com/parshred/parshred.git
     GIT_TAG v0.1.0 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(parshred)
 target_link_libraries(my_target PRIVATE parshred)
@@ -20,7 +20,7 @@ target_link_libraries(my_target PRIVATE parshred)
 ### Building from Source
 
 ```bash
-git clone https://github.com/yourorg/parshred.git && cd parshred
+git clone https://github.com/parshred/parshred.git && cd parshred
 cmake --preset release && cmake --build build/release
 # static library: build/release/src/libparshred.a
 ```

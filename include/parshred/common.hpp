@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR Commercial
+// Copyright (C) 2024-2025 Parshred Contributors
 #pragma once
 /// @file common.hpp
 /// @brief Common types, error codes, and utilities for parshred.

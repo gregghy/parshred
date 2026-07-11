@@ -63,7 +63,7 @@ if(PARSHRED_BUILD_PYTHON)
 endif()
 
 # ── CLI tool ───────────────────────────────────────────────────────────
-if(PARSHRED_BUILD_CLI)
+if(PARSHRED_BUILD_CLI AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/CMakeLists.txt")
     add_subdirectory(tools)
 endif()
 
@@ -71,3 +71,55 @@ endif()
 if(PARSHRED_BUILD_FUZZ)
     add_subdirectory(tests/fuzz)
 endif()
+
+# ── Installation ───────────────────────────────────────────────────────
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+# Collect all targets that need exporting (parshred + SIMD object libs)
+set(_parshred_install_targets parshred)
+if(TARGET parshred_sse42)
+    list(APPEND _parshred_install_targets parshred_sse42)
+endif()
+if(TARGET parshred_avx2)
+    list(APPEND _parshred_install_targets parshred_avx2)
+endif()
+if(TARGET parshred_avx512)
+    list(APPEND _parshred_install_targets parshred_avx512)
+endif()
+
+install(TARGETS ${_parshred_install_targets}
+    EXPORT parshredTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/parshred
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+)
+
+install(EXPORT parshredTargets
+    FILE parshredTargets.cmake
+    NAMESPACE parshred::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parshred
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parshredConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/parshredConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parshred
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/parshredConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/parshredConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/parshredConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parshred
+)

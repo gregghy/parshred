@@ -20,6 +20,7 @@ add_executable(parshred_tests
     test_normalization.cpp
     test_conformance.cpp
     test_xpath_extended.cpp
+    test_realworld.cpp
 )
 
 target_link_libraries(parshred_tests PRIVATE
