@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Complex seed corpus entry: namespaces, CDATA, comments, PI, entities -->
+<!DOCTYPE library SYSTEM "library.dtd">
+<?xml-stylesheet type="text/xsl" href="library.xsl"?>
+<library xmlns="urn:example:library"
+         xmlns:dc="http://purl.org/dc/elements/1.1/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="urn:example:library library.xsd"
+         version="3.1"
+         created="2024-01-01">
+
+  <!-- Section: fiction -->
+  <section id="s1" type="fiction" lang="en">
+    <dc:title>Fiction &amp; Fantasy</dc:title>
+
+    <book id="b001" available="true" rating="4.5">
+      <dc:title>The Name of the Wind</dc:title>
+      <author role="primary" born="1979">Patrick Rothfuss</author>
+      <publisher city="New York" country="US">DAW Books</publisher>
+      <price currency="USD" vat="0">25.99</price>
+      <isbn>978-0-7564-0407-9</isbn>
+      <tags>
+        <tag>fantasy</tag>
+        <tag>epic</tag>
+        <tag>magic-system</tag>
+      </tags>
+      <description><![CDATA[
+        A young man grows to be the most notorious wizard his world has ever
+        seen. Contains < special > characters & "quoted" text that would
+        otherwise need escaping outside a CDATA section.
+      ]]></description>
+      <review score="5" lang="en">Outstanding world-building &amp; prose.</review>
+    </book>
+
+    <book id="b002" available="false" rating="4.8">
+      <dc:title>Dune</dc:title>
+      <author role="primary" born="1920" died="1986">Frank Herbert</author>
+      <publisher city="Philadelphia" country="US">Chilton Books</publisher>
+      <price currency="USD" vat="0">14.99</price>
+      <isbn>978-0-441-17271-9</isbn>
+      <tags>
+        <tag>science-fiction</tag>
+        <tag>political</tag>
+        <tag>ecology</tag>
+      </tags>
+      <description>Set on the desert planet Arrakis, source of the spice
+        mél&#233;lange &#x2014; most precious substance in the universe.
+      </description>
+    </book>
+  </section>
+
+  <!-- Section: non-fiction -->
+  <section id="s2" type="non-fiction" lang="en">
+    <dc:title>Non-Fiction</dc:title>
+
+    <?library-hint index="true" fulltext="false"?>
+
+    <book id="b003" available="true" rating="4.9">
+      <dc:title>The C++ Programming Language</dc:title>
+      <author role="primary" born="1950">Bjarne Stroustrup</author>
+      <edition>4th</edition>
+      <publisher city="Upper Saddle River" country="US">Addison-Wesley</publisher>
+      <price currency="USD" vat="0">59.99</price>
+      <price currency="EUR" vat="19">54.90</price>
+      <isbn>978-0-321-56384-2</isbn>
+      <errata url="https://www.stroustrup.com/4th_printing5.html"/>
+    </book>
+  </section>
+
+  <metadata>
+    <record key="total-books" type="integer">3</record>
+    <record key="last-updated" type="date">2024-06-15</record>
+    <record key="notes" type="text">Ampersand: &amp;  Less-than: &lt;
+Greater-than: &gt;  Apostrophe: &apos;  Quote: &quot;</record>
+  </metadata>
+
+</library>

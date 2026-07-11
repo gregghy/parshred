@@ -1,6 +1,7 @@
 # ── Tests ──────────────────────────────────────────────────────────────
 add_executable(parshred_tests
     test_mmap.cpp
+    test_platform.cpp
     test_scanner.cpp
     test_tokenizer.cpp
     test_sax.cpp
@@ -12,6 +13,13 @@ add_executable(parshred_tests
     test_xpath.cpp
     test_dtd.cpp
     test_writer.cpp
+    test_encoding.cpp
+    test_xsd.cpp
+    test_error.cpp
+    test_pull_parser.cpp
+    test_normalization.cpp
+    test_conformance.cpp
+    test_xpath_extended.cpp
 )
 
 target_link_libraries(parshred_tests PRIVATE

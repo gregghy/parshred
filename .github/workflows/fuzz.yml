@@ -1,0 +1,120 @@
+name: Fuzzing
+
+on:
+  schedule:
+    # Weekly on Sunday at 02:00 UTC — low-traffic time, no concurrency pressure.
+    - cron: "0 2 * * 0"
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: libFuzzer smoke test
+    runs-on: ubuntu-24.04
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Install Clang with libFuzzer ──────────────────────────────────
+      # ubuntu-24.04 ships Clang 18 by default; we pin to 17 for
+      # consistency with the main CI matrix.
+      - name: Install Clang 17
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y clang-17 lld-17 llvm-17
+
+      # ── Cache: fuzz build directory ───────────────────────────────────
+      - name: Cache CMake fuzz build
+        uses: actions/cache@v4
+        with:
+          path: build/fuzz
+          key: cmake-fuzz-${{ hashFiles('**/CMakeLists.txt', 'tests/fuzz/**') }}
+          restore-keys: |
+            cmake-fuzz-
+
+      # ── Configure ─────────────────────────────────────────────────────
+      # -DPARSHRED_BUILD_TESTS=OFF avoids pulling in GoogleTest for fuzz builds.
+      # -DPARSHRED_BUILD_FUZZ=ON enables tests/fuzz/CMakeLists.txt.
+      # RelWithDebInfo gives line numbers in crash reports.
+      - name: Configure CMake
+        env:
+          CC: clang-17
+          CXX: clang++-17
+        run: |
+          cmake -S . \
+                -B build/fuzz \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DPARSHRED_BUILD_TESTS=OFF \
+                -DPARSHRED_BUILD_FUZZ=ON \
+                -DPARSHRED_BUILD_CLI=OFF \
+                -DPARSHRED_BUILD_BENCH=OFF
+
+      # ── Build all fuzz targets ─────────────────────────────────────────
+      - name: Build fuzz targets
+        run: |
+          cmake --build build/fuzz \
+                --config RelWithDebInfo \
+                --target fuzz_sax fuzz_dom fuzz_xpath \
+                --parallel $(nproc)
+
+      # ── Run each fuzzer for 60 s (smoke / regression check) ───────────
+      # -max_total_time=60  — wall-clock limit
+      # -timeout=10         — kill individual inputs that hang >10 s
+      # -max_len=16384      — cap input size; avoids OOM on long runs
+      # -rss_limit_mb=512   — RSS hard limit; OOM = crash report
+      # -error_exitcode=1   — propagate libFuzzer findings as CI failures
+      - name: Fuzz fuzz_sax (60 s)
+        run: |
+          build/fuzz/tests/fuzz/fuzz_sax \
+            tests/fuzz/corpus/ \
+            -max_total_time=60 \
+            -timeout=10 \
+            -max_len=16384 \
+            -rss_limit_mb=512 \
+            -error_exitcode=1 \
+            -print_final_stats=1
+
+      - name: Fuzz fuzz_dom (60 s)
+        run: |
+          build/fuzz/tests/fuzz/fuzz_dom \
+            tests/fuzz/corpus/ \
+            -max_total_time=60 \
+            -timeout=10 \
+            -max_len=16384 \
+            -rss_limit_mb=512 \
+            -error_exitcode=1 \
+            -print_final_stats=1
+
+      - name: Fuzz fuzz_xpath (60 s)
+        run: |
+          build/fuzz/tests/fuzz/fuzz_xpath \
+            tests/fuzz/corpus/ \
+            -max_total_time=60 \
+            -timeout=10 \
+            -max_len=4096 \
+            -rss_limit_mb=512 \
+            -error_exitcode=1 \
+            -print_final_stats=1
+
+      # ── Upload crash artifacts if a fuzzer finds a bug ─────────────────
+      # libFuzzer writes crash-* / oom-* / timeout-* files in the working dir.
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            crash-*
+            oom-*
+            timeout-*
+            slow-unit-*
+          if-no-files-found: ignore
+          retention-days: 30

@@ -158,7 +158,159 @@ struct FastDom {
 inline constexpr unsigned FDOM_NO_TEXT    = 1u << 0;  // Skip text nodes
 inline constexpr unsigned FDOM_NO_ATTRS   = 1u << 1;  // Skip attributes
 inline constexpr unsigned FDOM_NO_COMMENT = 1u << 2;  // Skip comments
+inline constexpr unsigned FDOM_NORMALIZE  = 1u << 3;  // Entity expansion + attribute normalization
 inline constexpr unsigned FDOM_FASTEST    = FDOM_NO_TEXT | FDOM_NO_COMMENT;
+
+// ── Entity expansion helpers ─────────────────────────────────────────
+
+/// Encode a Unicode code point as UTF-8 bytes appended to `out`.
+/// Silently drops code points above U+10FFFF or surrogate values.
+inline void encode_utf8_codepoint(uint32_t cp, std::vector<char>& out) {
+    if (cp <= 0x7F) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp <= 0x7FF) {
+        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0xFFFF) {
+        // Reject UTF-16 surrogates (U+D800..U+DFFF)
+        if (cp >= 0xD800 && cp <= 0xDFFF) return;
+        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0x10FFFF) {
+        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+    // Code points > U+10FFFF are silently dropped.
+}
+
+/// Expand XML predefined entities and character references in `src`,
+/// appending the result to `out`.
+///
+/// Recognised sequences:
+///   &lt;    → '<'
+///   &gt;    → '>'
+///   &amp;   → '&'
+///   &apos;  → '\''
+///   &quot;  → '"'
+///   &#NNN;  → UTF-8 codepoint (decimal)
+///   &#xHHH; → UTF-8 codepoint (hex)
+///   Unknown → passed through unchanged (e.g. "&foo;")
+inline void expand_entities_inline(std::string_view src, std::vector<char>& out) {
+    const char* p   = src.data();
+    const char* end = p + src.size();
+
+    while (p < end) {
+        if (*p != '&') {
+            out.push_back(*p++);
+            continue;
+        }
+
+        // p points to '&'
+        const char* amp = p;
+        ++p;  // skip '&'
+
+        // Character reference: &#...; or &#x...;
+        if (p < end && *p == '#') {
+            ++p;
+            bool is_hex = (p < end && (*p == 'x' || *p == 'X'));
+            if (is_hex) ++p;
+
+            uint32_t cp = 0;
+            bool any_digit = false;
+            if (is_hex) {
+                while (p < end && *p != ';') {
+                    char c = *p++;
+                    uint32_t digit = 0;
+                    if (c >= '0' && c <= '9')      digit = static_cast<uint32_t>(c - '0');
+                    else if (c >= 'a' && c <= 'f') digit = static_cast<uint32_t>(c - 'a' + 10);
+                    else if (c >= 'A' && c <= 'F') digit = static_cast<uint32_t>(c - 'A' + 10);
+                    else {
+                        // malformed — pass through
+                        cp = 0; any_digit = false; break;
+                    }
+                    cp = cp * 16 + digit;
+                    any_digit = true;
+                }
+            } else {
+                while (p < end && *p != ';') {
+                    char c = *p++;
+                    if (c < '0' || c > '9') {
+                        // malformed — pass through
+                        cp = 0; any_digit = false; break;
+                    }
+                    cp = cp * 10 + static_cast<uint32_t>(c - '0');
+                    any_digit = true;
+                }
+            }
+
+            if (any_digit && p < end && *p == ';') {
+                ++p;  // consume ';'
+                encode_utf8_codepoint(cp, out);
+            } else {
+                // Malformed: pass through raw bytes from '&' to current p
+                for (const char* q = amp; q < p; ++q) out.push_back(*q);
+            }
+            continue;
+        }
+
+        // Named entity: scan for ';'
+        const char* name_start = p;
+        while (p < end && *p != ';' && *p != '<' && *p != '&') ++p;
+
+        if (p < end && *p == ';') {
+            std::string_view name(name_start, static_cast<size_t>(p - name_start));
+            ++p;  // consume ';'
+
+            if      (name == "lt")   out.push_back('<');
+            else if (name == "gt")   out.push_back('>');
+            else if (name == "amp")  out.push_back('&');
+            else if (name == "apos") out.push_back('\'');
+            else if (name == "quot") out.push_back('"');
+            else {
+                // Unknown entity — pass through unchanged
+                out.push_back('&');
+                for (const char* q = name_start; q < name_start + name.size(); ++q)
+                    out.push_back(*q);
+                out.push_back(';');
+            }
+        } else {
+            // No closing ';' found — pass through raw '&' and what we scanned
+            for (const char* q = amp; q < p; ++q) out.push_back(*q);
+        }
+    }
+}
+
+/// Normalize an XML attribute value per the XML 1.0 spec:
+///   1. Replace each \t, \n, \r with a single space character.
+///   2. Expand entity and character references.
+///
+/// The normalised content is appended to `out`.
+/// Returns a (offset, length) pair into `out` (relative to the start of `out`
+/// before this call — caller passes the size before calling).
+inline std::pair<uint32_t, uint16_t>
+normalize_attr_value(std::string_view src, std::vector<char>& out) {
+    auto offset = static_cast<uint32_t>(out.size());
+
+    // We pre-process into a temporary so we can pass it to expand_entities_inline.
+    // For the common case with no whitespace replacements this is fine; if
+    // performance matters the two passes can be fused, but correctness is the goal.
+    std::string tmp;
+    tmp.reserve(src.size());
+    for (char c : src) {
+        if (c == '\t' || c == '\n' || c == '\r') tmp.push_back(' ');
+        else                                       tmp.push_back(c);
+    }
+
+    expand_entities_inline(tmp, out);
+
+    size_t full_len = out.size() - offset;
+    uint16_t clamped_len = static_cast<uint16_t>(
+        full_len > 65535u ? 65535u : full_len);
+    return {offset, clamped_len};
+}
 
 /// Parse XML into a compact flat DOM tree.
 /// This is the speed-record attempt — targeting 3+ GB/s.
@@ -172,7 +324,9 @@ FastDom fast_dom_parse(const char* data, size_t len) {
     dom.nodes = static_cast<FastNode*>(std::malloc(est * sizeof(FastNode)));
     if (!dom.nodes) throw std::bad_alloc();
     dom.capacity = est;
-    if constexpr (!(Flags & FDOM_NO_TEXT)) {
+    // Reserve the values buffer whenever text nodes are kept OR normalize mode
+    // is active (normalized attribute values also live in the values buffer).
+    if constexpr (!(Flags & FDOM_NO_TEXT) || (Flags & FDOM_NORMALIZE)) {
         dom.values.reserve(len / 4);
     }
 
@@ -212,6 +366,11 @@ FastDom fast_dom_parse(const char* data, size_t len) {
 
     while (pos < len) {
         // ── Skip text content ────────────────────────────────────────
+        // Always stop at '<'.  In NORMALIZE mode the raw chunk (which may contain
+        // entity references like &amp;) is later post-processed by
+        // expand_entities_inline.  We deliberately use skip_text_turbo so we
+        // never accidentally stop at '&' inside the outer '<'-delimited loop —
+        // entity references are handled entirely in the post-processing step.
         size_t text_start = pos;
         pos = skip_text_turbo(data, pos, len);
 
@@ -224,10 +383,22 @@ FastDom fast_dom_parse(const char* data, size_t len) {
                 nodes[node_count].flags = 0x01;  // Value in values buffer
                 nodes[node_count].name_ptr = data + text_start;
                 nodes[node_count].value_offset = static_cast<uint32_t>(dom.values.size());
+
+                if constexpr (Flags & FDOM_NORMALIZE) {
+                    // Expand entity/character references into the values buffer.
+                    // The raw input slice may contain &amp;, &#65;, etc.
+                    expand_entities_inline(
+                        std::string_view(data + text_start, pos - text_start),
+                        dom.values);
+                } else {
+                    // Zero-copy fast path: raw bytes straight into values buffer.
+                    dom.values.insert(dom.values.end(),
+                                      data + text_start, data + pos);
+                }
+
+                size_t stored_len = dom.values.size() - nodes[node_count].value_offset;
                 nodes[node_count].value_len = static_cast<uint16_t>(
-                    std::min(pos - text_start, size_t(65535)));
-                dom.values.insert(dom.values.end(),
-                                  data + text_start, data + pos);
+                    stored_len > 65535u ? 65535u : stored_len);
                 ++node_count;
 
                 auto& top = stack[stack_top];
@@ -370,10 +541,29 @@ FastDom fast_dom_parse(const char* data, size_t len) {
                     nodes[node_count].type = 6;  // Attribute type
                     nodes[node_count].name_ptr = data + attr_name_start;
                     nodes[node_count].name_len = static_cast<uint32_t>(attr_name_end - attr_name_start);
-                    // Point value directly into source buffer (zero-copy)
-                    // We repurpose value_offset as a raw pointer offset from data start
-                    nodes[node_count].value_offset = val_ptr ? static_cast<uint32_t>(val_ptr - data) : 0;
-                    nodes[node_count].value_len = static_cast<uint16_t>(std::min(val_len, size_t(65535)));
+
+                    if constexpr (Flags & FDOM_NORMALIZE) {
+                        // Normalize: replace whitespace chars, expand entities.
+                        // Value is stored in the values buffer (flag 0x01).
+                        nodes[node_count].flags = 0x01;
+                        if (val_ptr) {
+                            auto [off, vlen] = normalize_attr_value(
+                                std::string_view(val_ptr, val_len), dom.values);
+                            nodes[node_count].value_offset = off;
+                            nodes[node_count].value_len    = vlen;
+                        } else {
+                            nodes[node_count].value_offset = 0;
+                            nodes[node_count].value_len    = 0;
+                        }
+                    } else {
+                        // Zero-copy fast path: point directly into source buffer.
+                        // value_offset is a raw pointer offset from data start.
+                        nodes[node_count].value_offset = val_ptr
+                            ? static_cast<uint32_t>(val_ptr - data) : 0;
+                        nodes[node_count].value_len = static_cast<uint16_t>(
+                            std::min(val_len, size_t(65535)));
+                    }
+
                     ++node_count;
 
                     if (last_attr_idx_local) {

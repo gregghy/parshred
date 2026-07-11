@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+# Cancel any in-flight run for the same branch/PR so pushes don't queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux / GCC 13 ───────────────────────────────────────────
+          - name: Ubuntu GCC 13 Debug
+            os: ubuntu-24.04
+            compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+            build_type: Debug
+            sanitizers: ""
+
+          - name: Ubuntu GCC 13 Release
+            os: ubuntu-24.04
+            compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+            build_type: Release
+            sanitizers: ""
+
+          # ── Linux / Clang 17 ─────────────────────────────────────────
+          - name: Ubuntu Clang 17 Debug + ASan/UBSan
+            os: ubuntu-24.04
+            compiler: clang
+            cc: clang-17
+            cxx: clang++-17
+            build_type: Debug
+            sanitizers: "address,undefined"
+
+          - name: Ubuntu Clang 17 Release
+            os: ubuntu-24.04
+            compiler: clang
+            cc: clang-17
+            cxx: clang++-17
+            build_type: Release
+            sanitizers: ""
+
+          # ── macOS / AppleClang ───────────────────────────────────────
+          - name: macOS AppleClang Debug
+            os: macos-14
+            compiler: appleclang
+            cc: clang
+            cxx: clang++
+            build_type: Debug
+            sanitizers: ""
+
+          - name: macOS AppleClang Release
+            os: macos-14
+            compiler: appleclang
+            cc: clang
+            cxx: clang++
+            build_type: Release
+            sanitizers: ""
+
+          # ── Windows / MSVC 2022 ──────────────────────────────────────
+          - name: Windows MSVC 2022 Debug
+            os: windows-2022
+            compiler: msvc
+            cc: cl
+            cxx: cl
+            build_type: Debug
+            sanitizers: ""
+
+          - name: Windows MSVC 2022 Release
+            os: windows-2022
+            compiler: msvc
+            cc: cl
+            cxx: cl
+            build_type: Release
+            sanitizers: ""
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Install toolchain (Linux) ─────────────────────────────────────
+      - name: Install GCC 13 (Linux)
+        if: matrix.os == 'ubuntu-24.04' && matrix.compiler == 'gcc'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-13 g++-13
+
+      - name: Install Clang 17 (Linux)
+        if: matrix.os == 'ubuntu-24.04' && matrix.compiler == 'clang'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y clang-17 lld-17
+
+      # ── Cache: CMake build directory ──────────────────────────────────
+      # Key includes the matrix name, build type, OS, and a hash of all
+      # CMakeLists files so the cache is invalidated when build scripts change.
+      - name: Cache CMake build directory
+        uses: actions/cache@v4
+        with:
+          path: build/${{ matrix.build_type }}
+          key: cmake-${{ matrix.name }}-${{ matrix.build_type }}-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json') }}
+          restore-keys: |
+            cmake-${{ matrix.name }}-${{ matrix.build_type }}-
+
+      # ── Configure ─────────────────────────────────────────────────────
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          EXTRA_FLAGS=""
+          if [ -n "${{ matrix.sanitizers }}" ]; then
+            EXTRA_FLAGS="-DCMAKE_C_FLAGS=-fsanitize=${{ matrix.sanitizers }} -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=${{ matrix.sanitizers }}"
+            EXTRA_FLAGS="$EXTRA_FLAGS -DCMAKE_CXX_FLAGS=-fsanitize=${{ matrix.sanitizers }}"
+          fi
+          cmake -S . \
+                -B build/${{ matrix.build_type }} \
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DPARSHRED_BUILD_TESTS=ON \
+                -DPARSHRED_BUILD_CLI=ON \
+                -DPARSHRED_BUILD_BENCH=OFF \
+                $EXTRA_FLAGS
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . `
+                -B build/${{ matrix.build_type }} `
+                -DPARSHRED_BUILD_TESTS=ON `
+                -DPARSHRED_BUILD_CLI=ON `
+                -DPARSHRED_BUILD_BENCH=OFF
+
+      # ── Build ─────────────────────────────────────────────────────────
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake --build build/${{ matrix.build_type }} \
+                --config ${{ matrix.build_type }} \
+                --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake --build build/${{ matrix.build_type }} `
+                --config ${{ matrix.build_type }} `
+                --parallel
+
+      # ── Test ──────────────────────────────────────────────────────────
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        working-directory: build/${{ matrix.build_type }}
+        env:
+          # ASan/UBSan options: treat all errors as fatal, nice stack traces.
+          ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_stacktrace=1
+        run: |
+          ctest \
+            --build-config ${{ matrix.build_type }} \
+            --output-on-failure \
+            --no-tests=error \
+            --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) \
+            --output-junit test-results.xml
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        working-directory: build/${{ matrix.build_type }}
+        run: |
+          ctest `
+            --build-config ${{ matrix.build_type }} `
+            --output-on-failure `
+            --no-tests=error `
+            --parallel `
+            --output-junit test-results.xml
+
+      # ── Upload test results on failure ───────────────────────────────
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}-${{ matrix.build_type }}
+          path: build/${{ matrix.build_type }}/test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7

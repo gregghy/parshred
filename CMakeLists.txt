@@ -16,6 +16,7 @@ option(PARSHRED_BUILD_TESTS  "Build unit tests"        ON)
 option(PARSHRED_BUILD_BENCH  "Build benchmarks"         OFF)
 option(PARSHRED_BUILD_PYTHON "Build Python bindings"    OFF)
 option(PARSHRED_BUILD_CLI    "Build CLI tool"           ON)
+option(PARSHRED_BUILD_FUZZ   "Build libFuzzer harnesses (Clang only)" OFF)
 
 # ── Global compiler flags ─────────────────────────────────────────────
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -64,4 +65,9 @@ endif()
 # ── CLI tool ───────────────────────────────────────────────────────────
 if(PARSHRED_BUILD_CLI)
     add_subdirectory(tools)
+endif()
+
+# ── Fuzz targets (Clang + libFuzzer only) ──────────────────────────────
+if(PARSHRED_BUILD_FUZZ)
+    add_subdirectory(tests/fuzz)
 endif()
