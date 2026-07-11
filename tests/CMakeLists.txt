@@ -9,6 +9,7 @@ add_executable(parshred_tests
     test_pipeline.cpp
     test_dom.cpp
     test_namespace.cpp
+    test_xpath.cpp
 )
 
 target_link_libraries(parshred_tests PRIVATE

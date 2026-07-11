@@ -114,6 +114,9 @@ struct FastDom {
 
     [[nodiscard]] std::string_view value(const FastNode& n) const noexcept {
         if (n.value_len == 0) return {};
+        // Flag bit 0x01: value lives in the `values` buffer (text nodes in non-fastest mode)
+        if (n.flags & 0x01) return {values.data() + n.value_offset, n.value_len};
+        // Otherwise value_offset is relative to data_ptr (attributes in zero-copy mode)
         if (data_ptr) return {data_ptr + n.value_offset, n.value_len};
         return {values.data() + n.value_offset, n.value_len};
     }
@@ -218,6 +221,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
                 uint32_t idx = node_count;
                 nodes[node_count] = FastNode{};
                 nodes[node_count].type = 2;  // Text
+                nodes[node_count].flags = 0x01;  // Value in values buffer
                 nodes[node_count].name_ptr = data + text_start;
                 nodes[node_count].value_offset = static_cast<uint32_t>(dom.values.size());
                 nodes[node_count].value_len = static_cast<uint16_t>(
