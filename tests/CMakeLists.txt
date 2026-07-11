@@ -11,6 +11,7 @@ add_executable(parshred_tests
     test_namespace.cpp
     test_xpath.cpp
     test_dtd.cpp
+    test_writer.cpp
 )
 
 target_link_libraries(parshred_tests PRIVATE
