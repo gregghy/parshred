@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fuzz testing harness (libFuzzer)
 - W3C conformance test suite (64 tests)
 - Comprehensive documentation (quickstart, API reference, performance guide, migration guides)
-- 567 tests passing
+- 573 tests passing
 
 ### Performance
 - SAX: 700-850 MB/s

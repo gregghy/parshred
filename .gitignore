@@ -1,13 +1,18 @@
 # Build directories
 build/
+build-*/
 cmake-build-*/
+out/
 
-# IDE
+# IDE / Editor
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+.ccls-cache/
+.cache/
+.clangd/
 
 # Compiled objects
 *.o
@@ -15,19 +20,47 @@ cmake-build-*/
 *.a
 *.lib
 *.so
+*.so.*
 *.dylib
+*.dll
+*.exe
 
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.egg
 dist/
 *.whl
+.eggs/
+*.pyd
 
 # CMake
 CMakeUserPresets.json
 compile_commands.json
+_deps/
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Coverage / profiling
+*.gcda
+*.gcno
+*.gcov
+lcov.info
+coverage/
+
+# Benchmark data (generated)
+bench/*.xml
+bench/data/*.xml
+
+# Devin local config
+.devin/config.local.json
+
+# Fuzzing artifacts
+crash-*
+leak-*
+timeout-*
+oom-*

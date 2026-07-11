@@ -1,108 +1,164 @@
-# Parshred — The World's Fastest XML Parser
+# Parshred
 
-**SIMD-accelerated, zero-copy XML parsing for modern hardware.**
+[![CI](https://github.com/parshred/parshred/actions/workflows/ci.yml/badge.svg)](https://github.com/parshred/parshred/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/)
 
-Parshred redesigns XML processing around modern CPUs: AVX-512/AVX2 structural scanning, memory-mapped I/O, and streaming SAX parsing — delivering multi-GB/s throughput on commodity hardware.
+High-performance SIMD-accelerated XML parser for C++20 and Python.
+
+Parshred is built from the ground up for modern CPUs: it scans XML structure with
+AVX-512/AVX2/SSE4.2/NEON, keeps data in zero-copy `string_view` ranges, and offers
+a compact 32-byte DOM node. The result is a small, fast, standards-focused library
+that works well for both C++ and Python applications.
+
+## Feature Highlights
+
+- **2.2–2.8 GB/s DOM parsing** on x86-64 with AVX2; beats RapidXML at 64 KB+ and is
+  **2.4x faster at 128 MB**.
+- **3–8x faster than lxml** in Python, with competitive or better memory efficiency.
+- **Multiple APIs**: DOM, SAX, Pull Parser (StAX-style), and a streaming pipeline for
+  files larger than memory.
+- **XPath 1.0** with full operator, function, and predicate support.
+- **XML Namespace 1.0**, internal DTD validation, and XSD simple type validation.
+- **SIMD acceleration**: AVX-512, AVX2, SSE4.2, and ARM NEON with runtime dispatch.
+- **32-byte compact DOM nodes** — roughly 3x less memory than traditional node-based
+  parsers.
+- **573 tests**, fuzz-tested, and validated against the W3C XML conformance suite.
+
+## Performance
+
+DOM throughput on x86-64 with AVX2 (MB/s, higher is better):
+
+| Size    | Parshred | RapidXML | pugixml | vs RapidXML |
+|---------|----------|----------|---------|-------------|
+| 64 KB   | 2599     | 2575     | 1544    | 1.01x       |
+| 1 MB    | 2747     | 2845     | 852     | 0.97x       |
+| 16 MB   | 2764     | 2682     | 1778    | 1.03x       |
+| 64 MB   | 2250     | 952      | 741     | 2.36x       |
+| 128 MB  | 1996     | 822      | 758     | 2.43x       |
+
+Python throughput (MB/s, higher is better):
+
+| Size   | Parshred | lxml   | pugixml | vs lxml |
+|--------|----------|--------|---------|---------|
+| 10 MB  | 832      | 283    | 2145    | 2.9x    |
+| 100 MB | 1200     | 154    | 1181    | 7.8x    |
+| 1 GB   | 660      | 96*    | OOM     | 6.9x    |
+
+\* lxml in `iterparse` streaming mode.
 
 ## Quick Start
 
-### Build
+### CMake (FetchContent)
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(parshred
+    GIT_REPOSITORY https://github.com/parshred/parshred.git
+    GIT_TAG v0.1.0
+)
+FetchContent_MakeAvailable(parshred)
+target_link_libraries(myapp PRIVATE parshred::parshred)
+```
+
+### Build from Source
 
 ```bash
-# Debug build with tests
-cmake --preset debug
-cmake --build build/debug
-ctest --test-dir build/debug --output-on-failure
-
-# Release build with benchmarks
+git clone https://github.com/parshred/parshred.git
+cd parshred
 cmake --preset release
 cmake --build build/release
+sudo cmake --install build/release
 ```
 
-### CLI
+### Python
 
 ```bash
-./build/release/parshred --validate document.xml
-./build/release/parshred --count document.xml
-./build/release/parshred --bench document.xml
+pip install parshred
 ```
 
-### C++ API
+## Usage Examples
+
+### DOM Parsing (C++)
 
 ```cpp
 #include <parshred/parshred.hpp>
 
-parshred::SaxParser parser;
+std::string xml = "<catalog><book id=\"1\">Title</book></catalog>";
+auto dom = parshred::fast_dom_parse<0>(xml.data(), xml.size());
 
-parser.on_start_element([](std::string_view name, std::span<const parshred::Attribute> attrs) {
-    std::cout << "<" << name << ">\n";
-});
-
-parser.on_text([](std::string_view text) {
-    std::cout << text;
-});
-
-parser.parse_file("data.xml");
-
-// Check stats
-auto& stats = parser.stats();
-std::cout << stats.elements << " elements parsed at "
-          << (stats.bytes_parsed / 1e9) << " GB\n";
+// XPath queries
+auto title = parshred::xpath::evaluate_string(dom, "/catalog/book/text()");
+auto id = parshred::xpath::evaluate_string(dom, "/catalog/book/@id");
 ```
 
-### Python API
+### Pull Parser (C++)
 
-```bash
-pip install -e .
+```cpp
+#include <parshred/pull_parser.hpp>
+
+parshred::XmlReader reader(xml);
+while (reader.next()) {
+    if (reader.is_start_element("book")) {
+        auto id = reader.attribute("id");
+        auto text = reader.read_element_text();
+    }
+}
 ```
+
+### Python
 
 ```python
 import parshred
 
-# Event-driven
-for event_type, name, attrs in parshred.iterparse("data.xml"):
-    if event_type == "start":
-        print(f"<{name}>", attrs)
-
-# SAX-style
-parser = parshred.SaxParser()
-parser.on_start_element(lambda name, attrs: print(f"<{name}>"))
-parser.parse_file("data.xml")
+doc = parshred.parse_file("catalog.xml")
+for book in doc.xpath("//book"):
+    print(book.attr("id"), book.text)
 ```
 
-## Architecture
+### Build XML Programmatically
 
+```cpp
+#include <parshred/writer.hpp>
+
+parshred::DomBuilder builder;
+builder.start_element("catalog");
+builder.start_element("book");
+builder.add_attribute("id", "1");
+builder.add_text("Title");
+builder.end_element();
+builder.end_element();
+
+auto dom = builder.build();
+parshred::XmlWriter writer;
+std::string xml = writer.serialize(dom);
 ```
-XML Input → mmap → SIMD Structural Scan → Token Stream → SAX Events
-                   (AVX-512/AVX2/SSE4.2)
-```
 
-1. **Memory-mapped I/O**: Zero-copy file access via `mmap(2)`
-2. **SIMD structural scanner**: Scans 64 bytes/cycle (AVX-512) for `< > / " ' = &` with carry-less multiply quote masking
-3. **Tokenizer**: Walks the structural index to produce zero-copy tokens
-4. **SAX parser**: Fires callbacks with `string_view` references — no allocations
+## Documentation
 
-## Performance
-
-Targets:
-- **5x faster** than libxml2
-- **>10 GB/s** raw scanning throughput
-- **Near-zero** heap allocations during parsing
-
-Run benchmarks:
-```bash
-cmake --preset release
-cmake --build build/release
-./build/release/bench/parshred_bench --benchmark_format=console
-```
+- [Quick Start Guide](docs/quickstart.md)
+- [API Reference](docs/api_reference.md)
+- [Performance Guide](docs/performance.md)
+- [Conformance](docs/conformance.md)
+- [Migration from libxml2/pugixml/RapidXML](docs/migration.md)
 
 ## Requirements
 
-- C++20 compiler (GCC 12+, Clang 15+)
+- C++20 compiler: GCC 12+, Clang 15+, or MSVC 2022+
 - CMake 3.20+
-- x86-64 CPU (SSE 4.2 minimum; AVX2/AVX-512 for best performance)
-- Python 3.9+ (for bindings)
+- x86-64 with SSE4.2 minimum (AVX2/AVX-512 recommended) or ARM64 with NEON
+- Python 3.9+ (for the optional Python bindings)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Parshred is licensed under the **GNU Affero General Public License v3.0 or later**
+([AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0)) for open-source use.
+See [LICENSE](LICENSE) for the full license text.
+
+A commercial license is available for proprietary use. See
+[COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) for details.
+
+## Contributing
+
+Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for
+guidelines on code style, testing, and submitting pull requests.
