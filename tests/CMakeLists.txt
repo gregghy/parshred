@@ -7,6 +7,7 @@ add_executable(parshred_tests
     test_security.cpp
     test_fast_sax.cpp
     test_pipeline.cpp
+    test_dom.cpp
 )
 
 target_link_libraries(parshred_tests PRIVATE
