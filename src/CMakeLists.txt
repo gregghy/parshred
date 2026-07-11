@@ -6,6 +6,7 @@ add_library(parshred STATIC
     simd/scanner_scalar.cpp
     tokenizer.cpp
     sax_parser.cpp
+    fast_sax.cpp
 )
 
 target_include_directories(parshred PUBLIC
@@ -43,4 +44,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
     target_link_libraries(parshred PRIVATE parshred_avx512)
 
     target_compile_definitions(parshred PRIVATE PARSHRED_HAS_SSE42=1 PARSHRED_HAS_AVX2=1 PARSHRED_HAS_AVX512=1)
+
+    # Compile the fused SAX parser with AVX2 for SIMD scanning utils
+    set_source_files_properties(fast_sax.cpp PROPERTIES COMPILE_OPTIONS "-mavx2")
 endif()
