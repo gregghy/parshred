@@ -468,6 +468,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
         // ── Start tag ────────────────────────────────────────────────
         {
             size_t name_start = pos;
+            // Inline scalar name scan — faster than SIMD for typical short names (<32 chars)
             if (__builtin_expect(pos < len && parshred::is_name_start(data[pos]), 1)) {
                 ++pos;
                 while (pos < len && parshred::is_name_char(data[pos])) ++pos;
@@ -504,7 +505,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
             }
 
             // ── Parse attributes ─────────────────────────────────────
-            while (pos < len && parshred::is_whitespace(data[pos])) ++pos;
+            pos = skip_whitespace_fast(data, pos, len);
 
             uint32_t last_attr_idx_local = 0;
 
@@ -515,14 +516,14 @@ FastDom fast_dom_parse(const char* data, size_t len) {
                 while (pos < len && parshred::is_name_char(data[pos])) ++pos;
                 size_t attr_name_end = pos;
 
-                while (pos < len && parshred::is_whitespace(data[pos])) ++pos;
+                pos = skip_whitespace_fast(data, pos, len);
 
                 const char* val_ptr = nullptr;
                 size_t val_len = 0;
 
                 if (pos < len && data[pos] == '=') {
                     ++pos;
-                    while (pos < len && parshred::is_whitespace(data[pos])) ++pos;
+                    pos = skip_whitespace_fast(data, pos, len);
                     if (pos < len && (data[pos] == '"' || data[pos] == '\'')) {
                         char quote = data[pos];
                         ++pos;
@@ -574,7 +575,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
                     last_attr_idx_local = attr_idx;
                 }
 
-                while (pos < len && parshred::is_whitespace(data[pos])) ++pos;
+                pos = skip_whitespace_fast(data, pos, len);
             }
 
             // Self-closing?

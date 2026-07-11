@@ -93,18 +93,14 @@ inline size_t read_name_fast(const char* data, size_t pos, size_t len) noexcept 
     // Strategy: check multiple ranges with SIMD comparisons.
     if (pos + 32 <= len) {
         // Precompute range boundaries
-        const __m256i v_2c = _mm256_set1_epi8(0x2C);  // one below '-'
-        const __m256i v_2f = _mm256_set1_epi8(0x2F);  // one above '.'
-        const __m256i v_2f2 = _mm256_set1_epi8(0x2F); // '/' (not name char)
-        const __m256i v_30 = _mm256_set1_epi8(0x2F);  // one below '0'
-        const __m256i v_3a = _mm256_set1_epi8(0x3A);  // ':' (valid)
-        const __m256i v_3b = _mm256_set1_epi8(0x3B);  // one above ':'
-        const __m256i v_40 = _mm256_set1_epi8(0x40);  // one below 'A'
-        const __m256i v_5a = _mm256_set1_epi8(0x5A);  // 'Z'
-        const __m256i v_5f = _mm256_set1_epi8(0x5F);  // '_'
-        const __m256i v_60 = _mm256_set1_epi8(0x60);  // one below 'a'
-        const __m256i v_7a = _mm256_set1_epi8(0x7A);  // 'z'
-        const __m256i v_80 = _mm256_set1_epi8(static_cast<char>(0x80));
+        const __m256i v_2c  = _mm256_set1_epi8(0x2C);  // one below '-'
+        const __m256i v_2f2 = _mm256_set1_epi8(0x2F); // '/' — upper bound for '-','.'
+        const __m256i v_30  = _mm256_set1_epi8(0x2F);  // one below '0'
+        const __m256i v_3b  = _mm256_set1_epi8(0x3B);  // one above ':'
+        const __m256i v_40  = _mm256_set1_epi8(0x40);  // one below 'A'
+        const __m256i v_5f  = _mm256_set1_epi8(0x5F);  // '_'
+        const __m256i v_60  = _mm256_set1_epi8(0x60);  // one below 'a'
+        const __m256i v_80  = _mm256_set1_epi8(static_cast<char>(0x80));
 
         while (pos + 32 <= len) {
             __m256i chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + pos));

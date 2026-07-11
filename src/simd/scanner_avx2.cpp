@@ -22,13 +22,31 @@ static inline void extract_bits_32(uint32_t mask, uint32_t base_offset,
                                    const char* data,
                                    std::vector<uint32_t>& positions,
                                    std::vector<uint8_t>& chars) {
+    if (__builtin_expect(mask == 0, 1)) return;
+
+    // Batch extract into stack buffers to avoid per-bit push_back overhead.
+    // A 32-byte chunk has at most 32 structural characters.
+    uint32_t pos_buf[32];
+    uint8_t  chr_buf[32];
+    int count = 0;
+
     while (mask != 0) {
         int bit = __builtin_ctz(mask);
         uint32_t pos = base_offset + static_cast<uint32_t>(bit);
-        positions.push_back(pos);
-        chars.push_back(static_cast<uint8_t>(data[pos]));
+        pos_buf[count] = pos;
+        chr_buf[count] = static_cast<uint8_t>(data[pos]);
+        ++count;
         mask &= mask - 1;
     }
+
+    // Single bulk insert — one capacity check + memcpy instead of N push_backs.
+    size_t old_size = positions.size();
+    positions.resize(old_size + static_cast<size_t>(count));
+    chars.resize(chars.size() + static_cast<size_t>(count));
+    __builtin_memcpy(positions.data() + old_size, pos_buf,
+                     static_cast<size_t>(count) * sizeof(uint32_t));
+    __builtin_memcpy(chars.data() + chars.size() - static_cast<size_t>(count),
+                     chr_buf, static_cast<size_t>(count));
 }
 
 void scan_avx2(const char* data, size_t len,
