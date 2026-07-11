@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(ls)",
+      "Exec(cmake)",
+      "Exec(ctest)",
+      "Exec(g++)",
+      "Exec(/tmp/test_quote_cross)",
+      "Exec(/tmp/test_quote_cross2)",
+      "Exec(git init)",
+      "Exec(grep)",
+      "Exec(./build/release/parshred)",
+      "Exec(find)",
+      "Exec(./build/release/tools/parshred)",
+      "Exec(git add)"
+    ]
+  }
+}
