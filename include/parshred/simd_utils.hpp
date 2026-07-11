@@ -56,37 +56,106 @@ inline size_t skip_whitespace_fast(const char* data, size_t pos, size_t len) noe
 }
 
 /// Read a name starting at `pos`. Returns position past the last name char.
-/// Uses lookup table for character classification.
+/// Uses SIMD vpshufb-based classification for 32 bytes at a time,
+/// with scalar fallback for the tail.
 inline size_t read_name_fast(const char* data, size_t pos, size_t len) noexcept {
     if (pos >= len || !is_name_start(data[pos])) return pos;
     ++pos;
 
 #ifdef __AVX2__
-    // For names, a character is valid if it has CC_NAME set in the lookup table.
-    // We can't directly use SIMD for lookup-table checks, but we CAN use a
-    // range-based approach: valid name chars are:
-    //   a-z (0x61-0x7A), A-Z (0x41-0x5A), 0-9 (0x30-0x39),
-    //   _ (0x5F), : (0x3A), - (0x2D), . (0x2E), >= 0x80
+    // vpshufb-based name character classification.
+    // Valid name chars: a-z A-Z 0-9 _ : - . and >= 0x80
     //
-    // Strategy: a byte is a name char if:
-    //   (byte >= 0x30 && byte <= 0x3A) ||  // 0-9 :
-    //   (byte >= 0x41 && byte <= 0x5A) ||  // A-Z
-    //   (byte >= 0x61 && byte <= 0x7A) ||  // a-z
-    //   byte == 0x2D || byte == 0x2E || byte == 0x5F ||  // - . _
-    //   byte >= 0x80
+    // We use a "low nibble / high nibble" approach:
+    // For each byte, extract low nibble (0-15) and high nibble (0-15).
+    // Two lookup tables tell us if the byte could be a name char.
     //
-    // Simpler: NOT a name char if:
-    //   byte < 0x2D && byte != some specific ones... too complex.
+    // High nibble lookup: for each high nibble value, a bitmask of which
+    // low nibbles produce valid name chars at that row.
+    // Low nibble lookup: for each low nibble value, a bitmask of which
+    // high nibbles could produce valid name chars at that column.
     //
-    // Better approach: use SIMD shuffle-based lookup (vpshufb).
-    // Split byte into high nibble (index) and low nibble (bit position).
-    // For each high nibble, store a bitmask of which low nibbles are valid.
+    // If (high_result & low_result) != 0, the byte is a name char.
     //
-    // However, this is complex. For names (which are typically short,
-    // <20 chars), the scalar path with the lookup table is fast enough
-    // and branch-prediction-friendly.
+    // Actually, simpler: use the "non-name char detection" approach.
+    // A byte is NOT a name char if: 0x00-0x2C, 0x2F, 0x3B-0x40, 0x5B-0x5E, 0x60, 0x7B-0x7F
+    // A byte IS a name char if: 0x2D-0x2E, 0x30-0x3A, 0x41-0x5A, 0x5F, 0x61-0x7A, 0x80-0xFF
+    //
+    // Use range-based approach with saturating subtraction:
+    // For ASCII name chars, they fall into these ranges:
+    //   '-' (0x2D) '.' (0x2E)
+    //   '0'-'9' (0x30-0x39) ':' (0x3A)  
+    //   'A'-'Z' (0x41-0x5A)
+    //   '_' (0x5F)
+    //   'a'-'z' (0x61-0x7A)
+    //   >= 0x80
+    //
+    // Strategy: check multiple ranges with SIMD comparisons.
+    if (pos + 32 <= len) {
+        // Precompute range boundaries
+        const __m256i v_2c = _mm256_set1_epi8(0x2C);  // one below '-'
+        const __m256i v_2f = _mm256_set1_epi8(0x2F);  // one above '.'
+        const __m256i v_2f2 = _mm256_set1_epi8(0x2F); // '/' (not name char)
+        const __m256i v_30 = _mm256_set1_epi8(0x2F);  // one below '0'
+        const __m256i v_3a = _mm256_set1_epi8(0x3A);  // ':' (valid)
+        const __m256i v_3b = _mm256_set1_epi8(0x3B);  // one above ':'
+        const __m256i v_40 = _mm256_set1_epi8(0x40);  // one below 'A'
+        const __m256i v_5a = _mm256_set1_epi8(0x5A);  // 'Z'
+        const __m256i v_5f = _mm256_set1_epi8(0x5F);  // '_'
+        const __m256i v_60 = _mm256_set1_epi8(0x60);  // one below 'a'
+        const __m256i v_7a = _mm256_set1_epi8(0x7A);  // 'z'
+        const __m256i v_80 = _mm256_set1_epi8(static_cast<char>(0x80));
+
+        while (pos + 32 <= len) {
+            __m256i chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + pos));
+            
+            // Check each range independently, OR them together
+            // Range 1: '-' '.' (0x2D-0x2E)
+            __m256i r1 = _mm256_and_si256(
+                _mm256_cmpgt_epi8(chunk, v_2c),   // > 0x2C
+                _mm256_cmpgt_epi8(v_2f2, chunk)); // < 0x2F  (i.e., 0x2D or 0x2E)
+
+            // Range 2: '0'-':' (0x30-0x3A)
+            __m256i r2 = _mm256_and_si256(
+                _mm256_cmpgt_epi8(chunk, v_30),   // > 0x2F
+                _mm256_cmpgt_epi8(v_3b, chunk));  // < 0x3B
+
+            // Range 3: 'A'-'Z' (0x41-0x5A)
+            __m256i r3 = _mm256_and_si256(
+                _mm256_cmpgt_epi8(chunk, v_40),   // > 0x40
+                _mm256_cmpgt_epi8(_mm256_set1_epi8(0x5B), chunk)); // < 0x5B
+
+            // Range 4: '_' (0x5F) — single char
+            __m256i r4 = _mm256_cmpeq_epi8(chunk, v_5f);
+
+            // Range 5: 'a'-'z' (0x61-0x7A)
+            __m256i r5 = _mm256_and_si256(
+                _mm256_cmpgt_epi8(chunk, v_60),   // > 0x60
+                _mm256_cmpgt_epi8(_mm256_set1_epi8(0x7B), chunk)); // < 0x7B
+
+            // Range 6: >= 0x80 (high bit set)
+            // Use signed comparison: byte >= 0x80 means it's negative in signed
+            __m256i r6 = _mm256_cmpgt_epi8(v_80, chunk); // Wait, this checks < 0x80
+            // Actually for signed comparison: bytes >= 0x80 are negative, so < 0 in signed
+            // _mm256_cmpgt_epi8(zero, chunk) would give us bytes where chunk is negative
+            __m256i v_zero = _mm256_setzero_si256();
+            r6 = _mm256_cmpgt_epi8(v_zero, chunk); // chunk < 0 (i.e., >= 0x80 unsigned)
+
+            // OR all ranges together
+            __m256i is_name = _mm256_or_si256(
+                _mm256_or_si256(_mm256_or_si256(r1, r2), _mm256_or_si256(r3, r4)),
+                _mm256_or_si256(r5, r6));
+
+            // Find first byte that is NOT a name char
+            uint32_t not_name = ~static_cast<uint32_t>(_mm256_movemask_epi8(is_name));
+            if (not_name != 0) {
+                return pos + static_cast<size_t>(__builtin_ctz(not_name));
+            }
+            pos += 32;
+        }
+    }
 #endif
-    // Scalar: lookup table makes this just one indexed load per byte
+    // Scalar tail: lookup table makes this just one indexed load per byte
     while (pos < len && is_name_char(data[pos])) ++pos;
     return pos;
 }
