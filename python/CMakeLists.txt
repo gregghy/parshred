@@ -15,10 +15,13 @@ if(pybind11_FOUND)
     # NOTE: do NOT use -march=native here — it produces wheels that crash on
     # CPUs lacking the build host's SIMD features. The core library already
     # does runtime SIMD dispatch (separate sse42/avx2/avx512 object libs), so
-    # the binding shim only needs portable -O3. x86-64-v2 baseline guarantees
-    # SSE4.1/SSE4.2/POPCNT/CMPXCHG16B, which is the floor on every x86-64 CPU
-    # we support (the README lists SSE4.2 as the minimum).
-    target_compile_options(_parshred PRIVATE -O3 -march=x86-64-v2)
+    # the binding shim only needs portable -O3. No -march=x86-64-v2 because
+    # manylinux2014 ships GCC 10 which doesn't support it (added in GCC 11).
+    if(MSVC)
+        target_compile_options(_parshred PRIVATE /O2)
+    else()
+        target_compile_options(_parshred PRIVATE -O3)
+    endif()
 
     # When building via scikit-build-core, install into the Python package
     install(TARGETS _parshred DESTINATION parshred)
