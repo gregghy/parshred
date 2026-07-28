@@ -144,6 +144,8 @@ jobs:
         run: |
           cmake -S . `
                 -B build/${{ matrix.build_type }} `
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+                -DCMAKE_CXX_FLAGS="/std:c++20 /permissive- /Zc:char8_t- /EHsc" `
                 -DPARSHRED_BUILD_TESTS=ON `
                 -DPARSHRED_BUILD_CLI=ON `
                 -DPARSHRED_BUILD_BENCH=OFF
