@@ -13,6 +13,7 @@ target_include_directories(parshred PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_compile_features(parshred PUBLIC cxx_std_20)
 
 # ── SIMD compilation units with arch-specific flags ───────────────────
 # Each scanner variant is compiled with the minimum required ISA flags.

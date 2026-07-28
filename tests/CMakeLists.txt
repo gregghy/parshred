@@ -27,6 +27,7 @@ target_link_libraries(parshred_tests PRIVATE
     parshred
     GTest::gtest_main
 )
+target_compile_features(parshred_tests PRIVATE cxx_std_20)
 
 include(GoogleTest)
 gtest_discover_tests(parshred_tests)
