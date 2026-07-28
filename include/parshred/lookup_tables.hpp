@@ -26,7 +26,7 @@ enum CharClass : uint8_t {
 namespace detail {
 
 // Build the table at compile time.
-consteval uint8_t classify(unsigned ch) {
+constexpr uint8_t classify(unsigned ch) {
     uint8_t r = 0;
 
     // Whitespace
@@ -67,7 +67,7 @@ consteval uint8_t classify(unsigned ch) {
 struct LookupTable {
     uint8_t data[256];
 
-    consteval LookupTable() : data{} {
+    constexpr LookupTable() : data{} {
         for (unsigned i = 0; i < 256; ++i)
             data[i] = classify(i);
     }
