@@ -114,7 +114,7 @@ DomParseResult dom_parse(char* data, size_t len) {
     size_t pos = 0;
 
     // Helper: append a child to current parent
-    auto append_child = [&](XmlNode* child) __attribute__((always_inline)) {
+    auto append_child = [&](XmlNode* child) {
         child->parent = current;
         if (current->last_child) {
             current->last_child->next_sibling = child;
@@ -129,7 +129,7 @@ DomParseResult dom_parse(char* data, size_t len) {
     XmlNode* last_attr = nullptr;
 
     // Helper: append an attribute to a node
-    auto append_attr = [&](XmlNode* elem, XmlNode* attr) __attribute__((always_inline)) {
+    auto append_attr = [&](XmlNode* elem, XmlNode* attr) {
         attr->parent = elem;
         if (!last_attr) {
             elem->first_attr = attr;

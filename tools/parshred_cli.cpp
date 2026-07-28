@@ -7,6 +7,7 @@
 
 #include <parshred/parshred.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <iostream>
@@ -14,7 +15,15 @@
 
 template<typename T>
 inline void do_not_optimize(T&& value) {
+#if defined(_MSC_VER)
+    // MSVC has no inline-asm escape for this; use the compiler fence +
+    // volatile sink pattern instead.
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+    volatile char sink = reinterpret_cast<const char*>(&value)[0];
+    (void)sink;
+#else
     asm volatile("" : : "g"(value) : "memory");
+#endif
 }
 
 static void print_usage() {

@@ -33,7 +33,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
 #include <vector>
 
 namespace fs = std::filesystem;

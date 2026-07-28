@@ -356,7 +356,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
     stack[0] = {1, 0};  // Document level
 
     // Ensure we have space for at least one more node
-    auto ensure_capacity = [&]() __attribute__((always_inline)) {
+    auto ensure_capacity = [&]() {
         if (PARSHRED_UNLIKELY(node_count >= est)) {
             est *= 2;
             nodes = static_cast<FastNode*>(std::realloc(nodes, est * sizeof(FastNode)));

@@ -50,7 +50,7 @@ public:
 
     ~NodePool() {
         for (auto* page : pages_) {
-            std::free(page);
+            parshred::aligned_free(page);
         }
     }
 
@@ -70,7 +70,7 @@ public:
 
     NodePool& operator=(NodePool&& o) noexcept {
         if (this != &o) {
-            for (auto* p : pages_) std::free(p);
+            for (auto* p : pages_) parshred::aligned_free(p);
             pages_ = std::move(o.pages_);
             current_page_ = o.current_page_;
             offset_ = o.offset_;
@@ -84,7 +84,7 @@ public:
 
     /// Allocate a single node. Zero-initialized.
     /// Cost: increment pointer + conditional page allocation (rare).
-    [[nodiscard]] __attribute__((always_inline)) XmlNode* allocate() {
+    [[nodiscard]] PARSHRED_FORCE_INLINE XmlNode* allocate() {
         if (PARSHRED_UNLIKELY(offset_ >= NODES_PER_PAGE)) {
             grow();
         }
@@ -95,7 +95,7 @@ public:
     }
 
     /// Allocate a node and initialize its type.
-    [[nodiscard]] __attribute__((always_inline)) XmlNode* allocate(NodeType type) {
+    [[nodiscard]] PARSHRED_FORCE_INLINE XmlNode* allocate(NodeType type) {
         XmlNode* node = allocate();
         node->type = type;
         return node;
@@ -153,8 +153,10 @@ private:
             }
         }
 
-        // Allocate new page (aligned for cache efficiency)
-        void* raw = std::aligned_alloc(64, PAGE_SIZE);
+        // Allocate new page (aligned for cache efficiency).
+        // Use parshred::aligned_malloc for portability (MSVC has no
+        // std::aligned_alloc; macOS libc++ doesn't always expose it).
+        void* raw = parshred::aligned_malloc(PAGE_SIZE, 64);
         if (!raw) throw std::bad_alloc();
         // Zero the page — cheaper than placement-new for trivial types
         // XmlNode is trivially-destructible (only raw pointers + string_view)

@@ -10,16 +10,34 @@
 #include <fstream>
 #include <string>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 using namespace parshred;
 
 namespace {
 
-// Helper: create a temporary file with content using mkstemp (avoids tmpnam warning)
+// Helper: create a temporary file with content.
+// Uses mkstemp on POSIX, tmpnam + CreateFile on Windows.
 class TempFile {
 public:
     explicit TempFile(const std::string& content) {
+#if defined(_WIN32)
+        char tmpl[L_tmpnam];
+        ::tmpnam(tmpl);
+        path_ = tmpl;
+        HANDLE h = ::CreateFileA(path_.c_str(), GENERIC_WRITE, 0,
+                                 nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            ::WriteFile(h, content.data(), static_cast<DWORD>(content.size()), &written, nullptr);
+            ::CloseHandle(h);
+        }
+#else
         char tmpl[] = "/tmp/parshred_test_XXXXXX";
         int fd = ::mkstemp(tmpl);
         path_ = tmpl;
@@ -27,6 +45,7 @@ public:
             ::write(fd, content.data(), content.size());
             ::close(fd);
         }
+#endif
     }
     ~TempFile() { std::remove(path_.c_str()); }
 
