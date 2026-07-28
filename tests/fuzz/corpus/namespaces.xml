@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<root xmlns="urn:default" xmlns:a="urn:a" xmlns:b="urn:b">
+  <a:child b:attr="val" a:x="1" b:y="2"/>
+  <b:other xmlns:c="urn:c"><c:nested/></b:other>
+</root>

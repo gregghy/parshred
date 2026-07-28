@@ -199,7 +199,6 @@ inline Dtd parse_dtd(std::string_view content) {
             decl.name = name;
             
             // Read content spec
-            size_t spec_start = pos;
             if (pos + 5 <= len && content.substr(pos, 5) == "EMPTY") {
                 decl.model = ContentModel::Empty;
                 pos += 5;

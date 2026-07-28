@@ -17,7 +17,7 @@ Open a GitHub Issue and include:
 4. Ensure all tests pass.
 5. Submit a pull request with a clear description.
 
-By submitting a PR, you agree to license your contribution under the project's dual license (AGPL-3.0 / Commercial).
+By submitting a PR, you agree to license your contribution under the project's dual license (AGPL-3.0 / Commercial). Before we can merge your first PR, you must sign the Contributor License Agreement — the CLA Assistant bot will post a link on your PR, or see [`docs/cla/`](docs/cla/) for the Individual and Corporate CLA texts.
 
 ## Development setup
 

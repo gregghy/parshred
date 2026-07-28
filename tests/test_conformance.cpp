@@ -608,7 +608,7 @@ TEST(Conformance, NS_ScopeLifetime) {
 
         void on_start_element(std::string_view name,
                               const Attribute* attrs, size_t n) override {
-            auto qn = process_element_ns(name, attrs, n, ctx);
+            process_element_ns(name, attrs, n, ctx);
             uris_at_start.emplace_back(ctx.resolve("ex"));
         }
         void on_end_element(std::string_view) override { ctx.pop_scope(); }

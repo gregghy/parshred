@@ -1,0 +1,89 @@
+name: W3C Conformance
+
+# Runs the official W3C XML Conformance Test Suite
+# (https://www.w3.org/XML/Test/) against parshred and publishes a JUnit XML
+# report as a CI artifact. This is informational: it does not fail the
+# workflow, so known conformance gaps do not block development. New
+# regressions show up as a higher failure count in the published report.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly on Sunday at 03:00 UTC.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  w3c-xmlconf:
+    name: W3C XML Conformance Suite
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install GCC 13
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-13 g++-13
+
+      - name: Configure & build
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S . -B build/release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPARSHRED_BUILD_TESTS=ON \
+            -DPARSHRED_BUILD_CLI=OFF \
+            -DPARSHRED_BUILD_BENCH=OFF
+          cmake --build build/release --target w3c_xmlconf_runner --parallel $(nproc)
+
+      - name: Download W3C XML Conformance Suite (20080827)
+        run: |
+          curl -sL -o xmlts.zip https://www.w3.org/XML/Test/xmlts20080827.zip
+          unzip -q xmlts.zip -d xmlconf-root
+          # The zip extracts to xmlconf-root/xmlconf/
+          ls xmlconf-root/xmlconf/xmlconf.xml
+
+      - name: Run conformance suite
+        run: |
+          build/release/tests/w3c_xmlconf_runner \
+            xmlconf-root/xmlconf \
+            --junit w3c-xmlconf-junit.xml | tee w3c-xmlconf-summary.txt
+
+      - name: Upload JUnit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: w3c-xmlconf-junit
+          path: |
+            w3c-xmlconf-junit.xml
+            w3c-xmlconf-summary.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish summary to job summary
+        run: |
+          {
+            echo "## W3C XML Conformance Suite results"
+            echo
+            echo '```'
+            cat w3c-xmlconf-summary.txt
+            echo '```'
+            echo
+            echo "Full JUnit report is in the \`w3c-xmlconf-junit\` artifact."
+            echo
+            echo "Note: parshred is a non-validating parser. \`invalid\` tests "
+            echo "(well-formed but DTD-invalid) are expected to parse OK. The "
+            echo "not-wf failure count is a known conformance gap tracked for "
+            echo "future hardening; this workflow is informational and does not "
+            echo "fail CI."
+          } >> $GITHUB_STEP_SUMMARY

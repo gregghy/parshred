@@ -1,0 +1,155 @@
+name: Wheels
+
+# Build and publish platform wheels (manylinux, macOS, Windows) + sdist.
+# Triggers:
+#   - push of a v* tag  → build + upload to PyPI (production)
+#   - push to main      → build only (smoke check, no upload)
+#   - workflow_dispatch → manual build + optional upload
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-wheels:
+    name: Wheel ${{ matrix.os }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Build one wheel per OS × Python minor. cibuildwheel handles the
+        # CPython/PyPy ABI tags automatically.
+        include:
+          # Linux: manylinux2014 x86-64 (broadest glibc compat) + aarch64
+          - os: ubuntu-24.04
+            python: cp39
+            cibw_arch: x86_64
+          - os: ubuntu-24.04
+            python: cp310
+            cibw_arch: x86_64
+          - os: ubuntu-24.04
+            python: cp311
+            cibw_arch: x86_64
+          - os: ubuntu-24.04
+            python: cp312
+            cibw_arch: x86_64
+          - os: ubuntu-24.04
+            python: cp313
+            cibw_arch: x86_64
+          - os: ubuntu-24.04
+            python: cp39
+            cibw_arch: aarch64
+          - os: ubuntu-24.04
+            python: cp312
+            cibw_arch: aarch64
+          # macOS: universal2 covers Intel + Apple Silicon
+          - os: macos-13
+            python: cp39
+            cibw_arch: universal2
+          - os: macos-13
+            python: cp312
+            cibw_arch: universal2
+          # Windows: AMD64
+          - os: windows-2022
+            python: cp39
+            cibw_arch: AMD64
+          - os: windows-2022
+            python: cp312
+            cibw_arch: AMD64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: pip install --upgrade cibuildwheel scikit-build-core pybind11
+
+      - name: Build wheels
+        env:
+          # Pin to one Python tag per job (matrix.python) to keep jobs isolated.
+          CIBW_BUILD: "${{ matrix.python }}-*"
+          CIBW_ARCHS_LINUX: "${{ matrix.cibw_arch }}"
+          CIBW_ARCHS_MACOS: "${{ matrix.cibw_arch }}"
+          CIBW_ARCHS_WINDOWS: "${{ matrix.cibw_arch }}"
+          # manylinux2014 = glibc 2.17 (RHEL 8 / Ubuntu 18.04+). Broadest compat.
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          # Pass CMake options through to scikit-build-core.
+          CIBW_CONFIG_SETTINGS: "cmake.args=-DPARSHRED_BUILD_PYTHON=ON;-DPARSHRED_BUILD_TESTS=OFF;-DPARSHRED_BUILD_BENCH=OFF;-DPARSHRED_BUILD_CLI=OFF"
+          # Test the wheel in an isolated env with a smoke check.
+          CIBW_TEST_COMMAND: "python -c \"import parshred; d=parshred.parse('<a><b x=\\\"1\\\">t</b></a>'); assert d.root.name=='a'; assert d.root.children[0].attr('x')=='1'; print('wheel smoke OK')\""
+          # macOS: deploy target for universal2 (Intel + ARM64).
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.python }}-${{ matrix.cibw_arch }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  build-sdist:
+    name: Source distribution
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist
+        run: |
+          pip install --upgrade build scikit-build-core
+          python -m build --sdist --outdir dist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish to PyPI
+    needs: [build-wheels, build-sdist]
+    # Only publish on tag pushes (v*). Branch pushes just build/smoke-test.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write  # OIDC trusted publishing
+    steps:
+      - name: Download all wheel + sdist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # OIDC trusted publishing — no API token needed if PyPI project is
+          # configured for trusted publishing against this repo. Otherwise set
+          # PYPI_API_TOKEN in the pypi environment.
+          print-hash: true

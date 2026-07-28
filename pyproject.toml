@@ -27,3 +27,4 @@ Issues = "https://github.com/parshred/parshred/issues"
 
 [tool.scikit-build]
 cmake.args = ["-DPARSHRED_BUILD_PYTHON=ON", "-DPARSHRED_BUILD_TESTS=OFF", "-DPARSHRED_BUILD_BENCH=OFF", "-DPARSHRED_BUILD_CLI=OFF"]
+wheel.install-dir = "."

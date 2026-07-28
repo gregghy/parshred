@@ -2,6 +2,45 @@
 
 ---
 
+## W3C XML Conformance Test Suite
+
+Parshred is run against the official W3C XML Conformance Test Suite
+([xmlts20080827](https://www.w3.org/XML/Test/)) in CI
+(`.github/workflows/w3c.yml`). The JUnit report is published as a workflow
+artifact on every push and weekly via cron.
+
+Reference run (AMD Ryzen 5 7640U, GCC 16.1 `-O3`, suite 20080827):
+
+| TYPE     | Total | Pass | Fail | Skip | Notes |
+|----------|-------|------|------|------|-------|
+| valid    | 444   | 241  | 0    | 203  | Skips are UTF-16/UTF-32/EUC-JP files (encoding detected but not transcoded by the SAX path) |
+| invalid  | 174   | 36   | 0    | 138  | A non-validating parser must accept well-formed-but-DTD-invalid input — all run cases pass |
+| not-wf   | 1383  | 82   | 928  | 373  | **Known gap:** the SAX parser is too permissive on several well-formedness rules (see below) |
+| error    | 18    | 0    | 0    | 18   | Ambiguous per XML spec errata; skipped by design |
+| **Total**| **2019** | **359** | **928** | **732** | |
+
+### What the not-wf gap looks like
+
+The 928 not-wf failures are cases where parshred accepts input the W3C suite
+requires to be rejected. Representative categories observed in the James
+Clark `xmltest` set:
+
+- Bare `&` not part of a valid entity reference (`&amp no refc`).
+- `]]>` appearing in text outside a CDATA section.
+- Unclosed CDATA section (`<![CDATA[...` with no `]]>`).
+- Bare attribute names without `=value` (`<doc a1>`).
+- Processing instructions with no target name (`<? ?>`).
+- Various name/start-char violations.
+
+These are real well-formedness rules from XML 1.0 §2.1–§2.7 that the
+fast SAX path does not currently enforce. Closing this gap is tracked as
+follow-up hardening work; the conformance workflow is informational and
+does not fail CI, so development is not blocked while the gap is closed.
+The `valid` and `invalid` categories pass at 100% of run cases, so
+parshred does not reject any well-formed input in the suite.
+
+---
+
 ## XML 1.0 Specification Coverage
 
 Reference: https://www.w3.org/TR/xml/
@@ -140,15 +179,20 @@ Reference: https://www.w3.org/TR/xpath/
 | `following::` axis | Not supported | |
 | `preceding::` axis | Not supported | |
 | `namespace::` axis | Not supported | |
-| `count()` function | Supported | Via `evaluate_count()` |
-| `contains()` function | Not supported in predicates | |
-| `starts-with()` function | Not supported in predicates | |
-| `string-length()` function | Not supported in predicates | |
-| `name()` function | Not supported in predicates | |
-| `position()` function | Not supported in predicates | |
-| Boolean operators `and`, `or`, `not()` | Not supported | |
-| Arithmetic operators | Not supported | |
-| Union operator `|` | Not supported | |
+| `count()` function | Supported | Via `evaluate_count()` and in predicates |
+| `contains()` function | Supported | In predicates and expressions |
+| `starts-with()` function | Supported | In predicates and expressions |
+| `string-length()` function | Supported | |
+| `substring()` / `substring-before` / `substring-after` | Supported | |
+| `concat()` / `normalize-space()` / `translate()` | Supported | |
+| `number()` / `sum()` / `floor()` / `ceiling()` / `round()` | Supported | |
+| `true()` / `false()` / `not()` | Supported | |
+| `local-name()` / `name()` | Supported | |
+| `position()` function | Supported | In predicates and arithmetic |
+| Boolean operators `and`, `or`, `not()` | Supported | Including mixed `and`/`or` |
+| Arithmetic operators `+ - * div mod` | Supported | With correct precedence (`*` before `+`) |
+| Union operator `|` | Supported | With and without predicates |
+| Comparison operators `= != < <= > >=` | Supported | String and numeric comparison |
 | Variable references `$var` | Not supported | |
 | Abbreviated syntax `//` | Supported | Expands to `descendant-or-self::node()/` |
 

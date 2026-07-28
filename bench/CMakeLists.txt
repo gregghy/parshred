@@ -61,3 +61,13 @@ endif()
 target_compile_definitions(parshred_bench PRIVATE
     BENCH_DATA_DIR="${CMAKE_CURRENT_BINARY_DIR}/data/"
 )
+
+# ── Self-contained regression benchmark (no external parser deps) ─────
+# Used by .github/workflows/bench.yml to gate against >10% throughput
+# regression vs bench/baseline.json. Emits JSON.
+add_executable(bench_regression bench_regression.cpp)
+target_link_libraries(bench_regression PRIVATE parshred)
+target_compile_options(bench_regression PRIVATE -O3)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+    target_compile_options(bench_regression PRIVATE -march=native)
+endif()

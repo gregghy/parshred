@@ -307,7 +307,7 @@ TEST(FdomNormalizeDiag, NodeLayout_EntityOnlyText) {
     // Also check evaluate_strings
     auto strings = evaluate_strings(dom, "/root/text()");
     EXPECT_EQ(strings.size(), 1u);
-    if (!strings.empty()) EXPECT_EQ(strings[0], "<");
+    if (!strings.empty()) { EXPECT_EQ(strings[0], "<"); }
 }
 
 // ── Integration tests: entity expansion in text nodes ─────────────────

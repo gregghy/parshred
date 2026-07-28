@@ -1,0 +1,133 @@
+name: Benchmarks
+
+# Throughput regression gate. Runs a self-contained parshred benchmark and
+# compares the median MB/s per size against a cached baseline. The baseline
+# ratchets: when a run improves or stays within tolerance, the current run
+# becomes the new baseline (so improvements are locked in). When a run
+# regresses by more than --threshold, the workflow fails and the old
+# baseline is preserved.
+#
+# Triggers:
+#   - nightly (03:30 UTC) on main
+#   - on PRs that touch src/ or include/ (the hot paths)
+#   - manual
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  pull_request:
+    paths:
+      - "src/**"
+      - "include/**"
+      - "bench/bench_regression.cpp"
+      - "bench/baseline.json"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Throughput regression gate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install GCC 13
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-13 g++-13
+
+      - name: Configure & build benchmark
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S . -B build/release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPARSHRED_BUILD_BENCH=ON \
+            -DPARSHRED_BUILD_TESTS=OFF \
+            -DPARSHRED_BUILD_CLI=OFF
+          cmake --build build/release --target bench_regression --parallel $(nproc)
+
+      # Ratcheting baseline cache. Keyed on the ref so each branch tracks its
+      # own baseline. The cache is restored if present; otherwise the run
+      # bootstraps a new baseline.
+      - name: Restore cached baseline
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: bench-cached-baseline.json
+          key: bench-baseline-${{ github.ref }}-v1
+          restore-keys: |
+            bench-baseline-${{ github.base_ref }}-v1
+
+      - name: Run benchmark
+        run: |
+          # 15 runs, median is stable; sizes chosen to avoid sub-ms noise.
+          ./build/release/bench/bench_regression \
+            --runs 15 \
+            --sizes 262144,1048576,16777216,67108864 \
+            --out bench-current.json
+
+      - name: Compare against baseline
+        id: compare
+        continue-on-error: true
+        run: |
+          if [ ! -f bench-cached-baseline.json ]; then
+            echo "No cached baseline — bootstrapping from this run." >> $GITHUB_STEP_SUMMARY
+            cp bench-current.json bench-cached-baseline.json
+            echo "bootstrapped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          python3 tools/check_bench_regression.py \
+            bench-cached-baseline.json bench-current.json \
+            --threshold 10 > bench-compare.txt 2>&1
+          cat bench-compare.txt
+
+      - name: Publish comparison to job summary
+        if: always()
+        run: |
+          {
+            echo "## Throughput regression check"
+            echo
+            if [ "${{ steps.compare.outputs.bootstrapped }}" = "true" ]; then
+              echo "No cached baseline existed — this run bootstraps the baseline."
+            elif [ -f bench-compare.txt ]; then
+              echo '```'
+              cat bench-compare.txt
+              echo '```'
+            else
+              echo "Comparison did not run."
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+      # If the comparison passed (no regression), ratchet the baseline forward
+      # by saving the current run as the new cached baseline.
+      - name: Ratchet baseline (no regression)
+        if: success() && steps.compare.outputs.bootstrapped != 'true'
+        run: |
+          cp bench-current.json bench-cached-baseline.json
+          echo "Baseline ratcheted to current run."
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            bench-current.json
+            bench-cached-baseline.json
+            bench-compare.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Fail the workflow only on an actual regression (not on bootstrap).
+      - name: Fail on regression
+        if: steps.compare.outcome == 'failure'
+        run: |
+          echo "Throughput regression detected — see comparison above." >&2
+          exit 1

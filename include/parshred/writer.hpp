@@ -239,7 +239,10 @@ public:
     DomBuilder() {
         // Sentinel + document node
         nodes_.push_back(FastNode{});  // idx 0 = null
-        nodes_.push_back(FastNode{.type = 0});  // idx 1 = document
+        nodes_.push_back(FastNode{
+            .name_ptr = nullptr, .name_len = 0, .first_child = 0,
+            .next_sibling = 0, .first_attr = 0, .value_offset = 0,
+            .value_len = 0, .type = 0, .flags = 0});  // idx 1 = document
         stack_.push_back({1, 0});
     }
 

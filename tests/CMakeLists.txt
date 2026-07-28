@@ -30,3 +30,10 @@ target_link_libraries(parshred_tests PRIVATE
 
 include(GoogleTest)
 gtest_discover_tests(parshred_tests)
+
+# ── W3C XML Conformance Suite runner ──────────────────────────────────
+# Standalone executable (not a gtest). Downloads the official W3C suite in
+# CI and runs it; emits a JUnit XML report. See .github/workflows/w3c.yml.
+add_executable(w3c_xmlconf_runner w3c_xmlconf_runner.cpp)
+target_link_libraries(w3c_xmlconf_runner PRIVATE parshred)
+# Not registered with ctest — it needs the external suite, which CI fetches.

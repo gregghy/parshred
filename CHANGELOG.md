@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Official W3C XML Conformance Test Suite runner (`tests/w3c_xmlconf_runner`)
+  wired into CI (`.github/workflows/w3c.yml`); JUnit report published as a
+  workflow artifact. Reference run: 359 pass / 928 fail (not-wf gap) /
+  732 skip out of 2019 cases.
+- Benchmark regression gate (`.github/workflows/bench.yml`) with a
+  ratcheting baseline; fails on >10% throughput regression. Self-contained
+  `bench/bench_regression.cpp` + `tools/check_bench_regression.py`.
+- cibuildwheel workflow (`.github/workflows/wheels.yml`) producing
+  manylinux2014 (x86-64 + aarch64), macOS universal2, and Windows AMD64
+  wheels with PyPI trusted-publishing on tag pushes.
+- Contributor License Agreements (Individual + Corporate) under `docs/cla/`
+  with CLA Assistant config (`.github/cla.yml`).
+- TSan and MSan CI jobs in `ci.yml` (MSan informational pending an
+  instrumented libc++ build).
+- Expanded fuzz corpus seeds (malformed, entities, deep nesting, many
+  attributes, namespaces).
+
+### Changed
+- Rewrote README performance section with measured, machine-attributed
+  numbers. Honest headline: matches RapidXML within ~5% at 64 KB–16 MB,
+  1.5–2.4x faster at 64 MB+. Python: 5–8x faster than lxml.
+- Polished `COMMERCIAL_LICENSE.md` with explicit grant scope, pricing
+  tiers, evaluation licenses, and escrow terms.
+- Python wheel built portable (`-march=x86-64-v2` baseline) instead of
+  `-march=native`, so published wheels do not crash on CPUs lacking the
+  build host's SIMD features. Runtime SIMD dispatch remains in the core
+  library.
+- Updated `docs/conformance.md` with the W3C suite results table and
+  corrected the outdated XPath coverage table (arithmetic, boolean
+  operators, union, string/number functions are all supported per
+  `test_xpath_extended`).
+
+### Fixed
+- `-Wmissing-field-initializers` warnings in `dom_fast.hpp` and
+  `writer.hpp` (document node now fully zero-initialized via designated
+  initializers in declaration order).
+- Unused-variable warning in `dtd.hpp` (`spec_start`).
+- Unused-but-set-variable warning in `test_conformance.cpp`.
+- Dangling-else warning in `test_normalization.cpp`.
+
 ## [0.1.0] - 2025-07-14
 
 ### Added
@@ -12,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SAX parser with zero-copy string_view callbacks
 - Fused single-pass SAX parser (FastSAX) with Turbo mode
 - DOM parser with two modes: 80-byte full nodes, 32-byte compact nodes
-- DOM parser matching/beating RapidXML performance (2.4x faster at 128MB)
+- DOM parser matching RapidXML at small/mid sizes and 1.5–2.4x faster at 64 MB+
 - Pull parser (StAX/xmlReader-style API)
 - XPath 1.0 engine with arithmetic, comparison, boolean operators, string/number functions
 - XML Namespace 1.0 support
@@ -40,5 +83,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 - SAX: 700-850 MB/s
 - DOM (32-byte nodes): 2200-2800 MB/s on x86-64 with AVX2
-- Beats RapidXML at 64KB+ files, 2.4x faster at 128MB
-- Python: 3-8x faster than lxml, matches pugixml at 100MB+, 660 MB/s at 1GB
+- Matches RapidXML at 64 KB–16 MB; 1.5–2.4x faster at 64 MB+
+- Python: 5–8x faster than lxml

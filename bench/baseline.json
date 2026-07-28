@@ -1,0 +1,10 @@
+{
+  "benchmark": "fast_dom_parse",
+  "runs": 15,
+  "results": [
+    {"size_bytes": 262117, "size_label": "255K", "mbps_median": 1116.16, "mbps_min": 317.506, "mbps_max": 1125.42},
+    {"size_bytes": 1048576, "size_label": "1024K", "mbps_median": 1110.85, "mbps_min": 504.927, "mbps_max": 1116.06},
+    {"size_bytes": 16777171, "size_label": "16383K", "mbps_median": 910.172, "mbps_min": 833.755, "mbps_max": 935.215},
+    {"size_bytes": 67108819, "size_label": "65535K", "mbps_median": 981.469, "mbps_min": 971.203, "mbps_max": 1013.86}
+  ]
+}

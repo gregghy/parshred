@@ -108,7 +108,7 @@ struct PyElement {
 
 } // anonymous namespace
 
-PYBIND11_MODULE(parshred, m) {
+PYBIND11_MODULE(_parshred, m) {
     m.doc() = "Parshred: High-performance XML parser for Python";
 
     // ── Document ─────────────────────────────────────────────────────

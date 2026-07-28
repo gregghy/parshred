@@ -199,3 +199,101 @@ jobs:
           path: build/${{ matrix.build_type }}/test-results.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  # ── Thread Sanitizer (parallel pipeline data races) ──────────────────
+  # TSan catches data races in the chunked/parallel streaming pipeline.
+  # Runs on Clang with -fsanitize=thread.
+  tsan:
+    name: Clang 17 Debug + TSan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Clang 17
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y clang-17 lld-17
+      - name: Configure
+        env:
+          CC: clang-17
+          CXX: clang++-17
+        run: |
+          cmake -S . -B build/tsan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DPARSHRED_BUILD_TESTS=ON \
+            -DPARSHRED_BUILD_CLI=OFF \
+            -DPARSHRED_BUILD_BENCH=OFF \
+            -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -g" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+      - name: Build
+        run: cmake --build build/tsan --target parshred_tests --parallel $(nproc)
+      - name: Run tests
+        working-directory: build/tsan
+        env:
+          TSAN_OPTIONS: "halt_on_error=1:abort_on_error=1:second_deadlock_stack=1"
+        run: |
+          ctest --output-on-failure --no-tests=error \
+                --parallel $(nproc) --output-junit test-results.xml
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-tsan
+          path: build/tsan/test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ── Memory Sanitizer (uninitialized reads) ───────────────────────────
+  # MSan detects use of uninitialized memory. NOTE: a fully correct MSan
+  # run requires an MSan-instrumented libc++; the GitHub runner's stock
+  # libc++ is NOT instrumented, so this job may report false positives from
+  # stdlib internals. It is informational (continue-on-error) until an
+  # instrumented libc++ build is wired in. Real parshred MSan findings
+  # (origin tracked to src/ or include/) should still be investigated.
+  msan:
+    name: Clang 17 Debug + MSan (informational)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Clang 17
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y clang-17 lld-17
+      - name: Configure
+        env:
+          CC: clang-17
+          CXX: clang++-17
+        run: |
+          cmake -S . -B build/msan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DPARSHRED_BUILD_TESTS=ON \
+            -DPARSHRED_BUILD_CLI=OFF \
+            -DPARSHRED_BUILD_BENCH=OFF \
+            -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory"
+      - name: Build
+        run: cmake --build build/msan --target parshred_tests --parallel $(nproc)
+      - name: Run tests
+        working-directory: build/msan
+        env:
+          MSAN_OPTIONS: "halt_on_error=1:abort_on_error=1:print_stats=1"
+        run: |
+          ctest --output-on-failure --no-tests=error \
+                --parallel $(nproc) --output-junit test-results.xml || true
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-msan
+          path: build/msan/test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
+

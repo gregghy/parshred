@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY greeting "Hello &amp; welcome">
+  <!ENTITY nested "&greeting; world">
+]>
+<doc>&nested; &#65; &#x42; &lt;tag&gt;</doc>

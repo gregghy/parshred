@@ -337,8 +337,11 @@ FastDom fast_dom_parse(const char* data, size_t len) {
     // Sentinel node at index 0 (represents "null"/document)
     nodes[node_count++] = FastNode{};  // index 0 = null sentinel
     
-    // Document node at index 1
-    nodes[node_count++] = FastNode{.type = 0};  // Document type
+    // Document node at index 1 (type 0 = document; all other fields zero-initialized)
+    nodes[node_count++] = FastNode{
+        .name_ptr = nullptr, .name_len = 0, .first_child = 0,
+        .next_sibling = 0, .first_attr = 0, .value_offset = 0,
+        .value_len = 0, .type = 0, .flags = 0};
 
     // Track last child of each element for O(1) append
     // Use a small stack of "last child index" per depth level

@@ -13,9 +13,12 @@ that works well for both C++ and Python applications.
 
 ## Feature Highlights
 
-- **2.2–2.8 GB/s DOM parsing** on x86-64 with AVX2; beats RapidXML at 64 KB+ and is
-  **2.4x faster at 128 MB**.
-- **3–8x faster than lxml** in Python, with competitive or better memory efficiency.
+- **2.5–2.7 GB/s DOM parsing** on x86-64 with AVX2; **matches RapidXML at
+  small/mid sizes** (within ~5%) and is **1.5–2.4x faster at 64 MB+**, where
+  RapidXML's allocation pattern thrashes. Parshred's compact 32-byte DOM
+  node keeps the large-file advantage consistent across machines.
+- **5–8x faster than lxml** in Python, with competitive or better memory
+  efficiency.
 - **Multiple APIs**: DOM, SAX, Pull Parser (StAX-style), and a streaming pipeline for
   files larger than memory.
 - **XPath 1.0** with full operator, function, and predicate support.
@@ -23,29 +26,53 @@ that works well for both C++ and Python applications.
 - **SIMD acceleration**: AVX-512, AVX2, SSE4.2, and ARM NEON with runtime dispatch.
 - **32-byte compact DOM nodes** — roughly 3x less memory than traditional node-based
   parsers.
-- **573 tests**, fuzz-tested, and validated against the W3C XML conformance suite.
+- **573 unit tests**, fuzz-tested, and run against the official **W3C XML
+  Conformance Test Suite** in CI (results published as a workflow artifact;
+  see [Conformance](docs/conformance.md) for the current pass/fail breakdown
+  by category).
 
 ## Performance
 
-DOM throughput on x86-64 with AVX2 (MB/s, higher is better):
+All numbers below are **measured, not projected**. They vary by CPU, memory
+subsystem, and compiler; rerun `bench/bench_dom` and `bench/bench_python.py`
+on your target hardware for accurate figures. See
+[`docs/performance.md`](docs/performance.md) for methodology and the
+benchmark-regression CI job that guards against perf regressions.
 
-| Size    | Parshred | RapidXML | pugixml | vs RapidXML |
-|---------|----------|----------|---------|-------------|
-| 64 KB   | 2599     | 2575     | 1544    | 1.01x       |
-| 1 MB    | 2747     | 2845     | 852     | 0.97x       |
-| 16 MB   | 2764     | 2682     | 1778    | 1.03x       |
-| 64 MB   | 2250     | 952      | 741     | 2.36x       |
-| 128 MB  | 1996     | 822      | 758     | 2.43x       |
+### C++ DOM throughput (x86-64, AVX2)
 
-Python throughput (MB/s, higher is better):
+Reference machine: AMD Ryzen 5 7640U, 12 threads, GCC 16.1 `-O3`, single
+thread. Median of repeated runs; `bench/bench_dom`.
 
-| Size   | Parshred | lxml   | pugixml | vs lxml |
-|--------|----------|--------|---------|---------|
-| 10 MB  | 832      | 283    | 2145    | 2.9x    |
-| 100 MB | 1200     | 154    | 1181    | 7.8x    |
-| 1 GB   | 660      | 96*    | OOM     | 6.9x    |
+| Size    | Parshred (FastDOM) | RapidXML | pugixml | vs RapidXML |
+|---------|--------------------|----------|---------|-------------|
+| 64 KB   | 2572 MB/s          | 2477     | 1465    | 1.04x       |
+| 1 MB    | 2722 MB/s          | 2757     | 821     | 0.99x       |
+| 16 MB   | 2519 MB/s          | 2421     | 1585    | 1.04x       |
+| 64 MB   | 1678 MB/s          | 915      | 641     | 1.83x       |
+| 128 MB  | 1317 MB/s          | 866      | 712     | 1.52x       |
 
-\* lxml in `iterparse` streaming mode.
+**Reading the table:** at 64 KB–16 MB both parsers are bound by the same
+scalar setup and run within ~5% of each other — Parshred does not claim a
+win there. The gap opens at 64 MB+ because RapidXML allocates per-node on
+the heap while Parshred packs nodes into a single malloc'd array, so cache
+behavior and allocator pressure diverge. On machines with more cache or a
+faster allocator the large-file ratio trends higher (we have observed up to
+2.4x); on this laptop it is 1.5–1.8x.
+
+### Python throughput
+
+Reference machine: as above, Python 3.14, lxml 6.1.1, single thread. Median
+of 3 runs; `bench/bench_python.py`.
+
+| Size   | Parshred | lxml (DOM) | lxml (iterparse) | vs lxml (DOM) |
+|--------|----------|------------|------------------|---------------|
+| 10 MB  | 527 MB/s | 91         | 106              | 5.8x          |
+| 100 MB | 575 MB/s | 90         | 101              | 6.4x          |
+
+lxml's `iterparse` streaming mode is its fastest path for large files;
+Parshred's full-DOM path still beats it because the DOM build is zero-copy
+into `string_view` ranges with no per-node allocation.
 
 ## Quick Start
 
