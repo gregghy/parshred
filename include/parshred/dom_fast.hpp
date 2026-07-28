@@ -13,6 +13,7 @@
 /// which is optimal for modern CPUs with write-combining buffers.
 
 #include <parshred/common.hpp>
+#include <parshred/platform.hpp>
 #include <parshred/lookup_tables.hpp>
 #include <parshred/simd_utils.hpp>
 
@@ -356,7 +357,7 @@ FastDom fast_dom_parse(const char* data, size_t len) {
 
     // Ensure we have space for at least one more node
     auto ensure_capacity = [&]() __attribute__((always_inline)) {
-        if (__builtin_expect(node_count >= est, 0)) {
+        if (PARSHRED_UNLIKELY(node_count >= est)) {
             est *= 2;
             nodes = static_cast<FastNode*>(std::realloc(nodes, est * sizeof(FastNode)));
             if (!nodes) throw std::bad_alloc();
@@ -472,13 +473,13 @@ FastDom fast_dom_parse(const char* data, size_t len) {
         {
             size_t name_start = pos;
             // Inline scalar name scan — faster than SIMD for typical short names (<32 chars)
-            if (__builtin_expect(pos < len && parshred::is_name_start(data[pos]), 1)) {
+            if (PARSHRED_LIKELY(pos < len && parshred::is_name_start(data[pos]))) {
                 ++pos;
                 while (pos < len && parshred::is_name_char(data[pos])) ++pos;
             }
             size_t name_end = pos;
 
-            if (__builtin_expect(name_end == name_start, 0)) {
+            if (PARSHRED_UNLIKELY(name_end == name_start)) {
                 while (pos < len && data[pos] != '>') ++pos;
                 if (pos < len) ++pos;
                 continue;

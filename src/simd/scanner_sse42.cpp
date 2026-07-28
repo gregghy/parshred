@@ -5,7 +5,7 @@
 /// characters, with carry-less multiply for quote masking.
 
 #include <parshred/simd_scanner.hpp>
-
+#include <parshred/platform.hpp>
 
 #include <immintrin.h>
 #include <nmmintrin.h>
@@ -27,7 +27,7 @@ static inline void extract_bits(uint32_t mask, uint32_t base_offset,
                                 std::vector<uint32_t>& positions,
                                 std::vector<uint8_t>& chars) {
     while (mask != 0) {
-        int bit = __builtin_ctz(mask);
+        int bit = parshred::ctz(mask);
         uint32_t pos = base_offset + static_cast<uint32_t>(bit);
         positions.push_back(pos);
         chars.push_back(static_cast<uint8_t>(data[pos]));

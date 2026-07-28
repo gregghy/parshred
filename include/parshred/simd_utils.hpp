@@ -12,6 +12,7 @@
 #include <immintrin.h>
 #endif
 
+#include <parshred/platform.hpp>
 #include <parshred/lookup_tables.hpp>
 
 namespace parshred {
@@ -45,7 +46,7 @@ inline size_t skip_whitespace_fast(const char* data, size_t pos, size_t len) noe
         // Invert: find first non-whitespace
         uint32_t not_ws = ~static_cast<uint32_t>(_mm256_movemask_epi8(is_ws));
         if (not_ws != 0) {
-            return pos + static_cast<size_t>(__builtin_ctz(not_ws));
+            return pos + static_cast<size_t>(parshred::ctz(not_ws));
         }
         pos += 32;
     }
@@ -145,7 +146,7 @@ inline size_t read_name_fast(const char* data, size_t pos, size_t len) noexcept 
             // Find first byte that is NOT a name char
             uint32_t not_name = ~static_cast<uint32_t>(_mm256_movemask_epi8(is_name));
             if (not_name != 0) {
-                return pos + static_cast<size_t>(__builtin_ctz(not_name));
+                return pos + static_cast<size_t>(parshred::ctz(not_name));
             }
             pos += 32;
         }
@@ -166,7 +167,7 @@ inline size_t find_char_fast(const char* data, size_t pos, size_t len, char targ
         uint32_t mask = static_cast<uint32_t>(
             _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, v_target)));
         if (mask != 0) {
-            return pos + static_cast<size_t>(__builtin_ctz(mask));
+            return pos + static_cast<size_t>(parshred::ctz(mask));
         }
         pos += 32;
     }
@@ -190,7 +191,7 @@ inline size_t skip_text_fast(const char* data, size_t pos, size_t len) noexcept 
             )
         ));
         if (hit != 0) {
-            return pos + static_cast<size_t>(__builtin_ctz(hit));
+            return pos + static_cast<size_t>(parshred::ctz(hit));
         }
         pos += 32;
     }
@@ -208,7 +209,7 @@ inline size_t skip_text_turbo(const char* data, size_t pos, size_t len) noexcept
         uint32_t hit = static_cast<uint32_t>(
             _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, v_lt)));
         if (hit != 0) {
-            return pos + static_cast<size_t>(__builtin_ctz(hit));
+            return pos + static_cast<size_t>(parshred::ctz(hit));
         }
         pos += 32;
     }
@@ -231,7 +232,7 @@ inline size_t find_comment_end(const char* data, size_t pos, size_t len) noexcep
         uint32_t dashes = static_cast<uint32_t>(
             _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, v_dash)));
         while (dashes != 0) {
-            int bit = __builtin_ctz(dashes);
+            int bit = parshred::ctz(dashes);
             size_t p = pos + static_cast<size_t>(bit);
             if (p + 2 < len && data[p + 1] == '-' && data[p + 2] == '>') {
                 return p;
@@ -257,7 +258,7 @@ inline size_t find_cdata_end(const char* data, size_t pos, size_t len) noexcept 
         uint32_t brackets = static_cast<uint32_t>(
             _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, v_bracket)));
         while (brackets != 0) {
-            int bit = __builtin_ctz(brackets);
+            int bit = parshred::ctz(brackets);
             size_t p = pos + static_cast<size_t>(bit);
             if (p + 2 < len && data[p + 1] == ']' && data[p + 2] == '>') {
                 return p;
@@ -283,7 +284,7 @@ inline size_t find_pi_end(const char* data, size_t pos, size_t len) noexcept {
         uint32_t qs = static_cast<uint32_t>(
             _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, v_q)));
         while (qs != 0) {
-            int bit = __builtin_ctz(qs);
+            int bit = parshred::ctz(qs);
             size_t p = pos + static_cast<size_t>(bit);
             if (p + 1 < len && data[p + 1] == '>') return p;
             qs &= qs - 1;

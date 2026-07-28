@@ -13,6 +13,7 @@
 ///   - extract_context() — pulls ~N chars of source around an offset
 
 #include <parshred/common.hpp>
+#include <parshred/platform.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -433,7 +434,7 @@ public:
 
             // Count '\n' bytes (each set bit in the movemask is one '\n').
             int nl_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, v_nl));
-            int nl_count = __builtin_popcount(static_cast<unsigned>(nl_mask));
+            int nl_count = parshred::popcount(static_cast<unsigned>(nl_mask));
 
             if (nl_count > 0) {
                 // One or more newlines in this chunk.  We need to update col_
@@ -441,7 +442,7 @@ public:
                 // however many non-newline bytes follow it in the chunk.
                 //
                 // Find position of the last '\n' in the chunk.
-                int last_nl_bit = 31 - __builtin_clz(static_cast<unsigned>(nl_mask));
+                int last_nl_bit = 31 - parshred::clz(static_cast<unsigned>(nl_mask));
                 size_t trailing  = 15 - static_cast<size_t>(last_nl_bit); // bytes after last '\n'
 
                 line_ += static_cast<uint32_t>(nl_count);

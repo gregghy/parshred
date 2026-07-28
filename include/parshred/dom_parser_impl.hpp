@@ -12,6 +12,7 @@
 ///   - Redundant name/value copies
 
 #include <parshred/dom_parser.hpp>
+#include <parshred/platform.hpp>
 #include <cstring>
 
 namespace parshred {
@@ -283,7 +284,7 @@ DomParseResult dom_parse(char* data, size_t len) {
             size_t name_start = pos;
             // Read element name — fast scalar path for short names
             // We know we're past '<' and whitespace, so check name-start directly
-            if (__builtin_expect(pos < len && parshred::is_name_start(data[pos]), 1)) {
+            if (PARSHRED_LIKELY(pos < len && parshred::is_name_start(data[pos]))) {
                 ++pos;
                 // Unroll first few chars for short names (branch-prediction friendly)
                 while (pos < len && parshred::is_name_char(data[pos])) ++pos;

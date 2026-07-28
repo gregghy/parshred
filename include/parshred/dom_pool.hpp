@@ -13,6 +13,7 @@
 /// ~56 KB of pool memory — fits in L1 or L2 cache.
 
 #include <parshred/dom.hpp>
+#include <parshred/platform.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -84,7 +85,7 @@ public:
     /// Allocate a single node. Zero-initialized.
     /// Cost: increment pointer + conditional page allocation (rare).
     [[nodiscard]] __attribute__((always_inline)) XmlNode* allocate() {
-        if (__builtin_expect(offset_ >= NODES_PER_PAGE, 0)) {
+        if (PARSHRED_UNLIKELY(offset_ >= NODES_PER_PAGE)) {
             grow();
         }
         XmlNode* node = current_page_ + offset_;

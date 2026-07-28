@@ -5,9 +5,10 @@
 /// characters, with carry-less multiply for quote masking.
 
 #include <parshred/simd_scanner.hpp>
-
+#include <parshred/platform.hpp>
 
 #include <immintrin.h>
+#include <cstring>
 
 namespace parshred::detail {
 
@@ -22,7 +23,7 @@ static inline void extract_bits_32(uint32_t mask, uint32_t base_offset,
                                    const char* data,
                                    std::vector<uint32_t>& positions,
                                    std::vector<uint8_t>& chars) {
-    if (__builtin_expect(mask == 0, 1)) return;
+    if (PARSHRED_UNLIKELY(mask == 0)) return;
 
     // Batch extract into stack buffers to avoid per-bit push_back overhead.
     // A 32-byte chunk has at most 32 structural characters.
@@ -31,7 +32,7 @@ static inline void extract_bits_32(uint32_t mask, uint32_t base_offset,
     int count = 0;
 
     while (mask != 0) {
-        int bit = __builtin_ctz(mask);
+        int bit = parshred::ctz(mask);
         uint32_t pos = base_offset + static_cast<uint32_t>(bit);
         pos_buf[count] = pos;
         chr_buf[count] = static_cast<uint8_t>(data[pos]);
@@ -43,10 +44,10 @@ static inline void extract_bits_32(uint32_t mask, uint32_t base_offset,
     size_t old_size = positions.size();
     positions.resize(old_size + static_cast<size_t>(count));
     chars.resize(chars.size() + static_cast<size_t>(count));
-    __builtin_memcpy(positions.data() + old_size, pos_buf,
-                     static_cast<size_t>(count) * sizeof(uint32_t));
-    __builtin_memcpy(chars.data() + chars.size() - static_cast<size_t>(count),
-                     chr_buf, static_cast<size_t>(count));
+    std::memcpy(positions.data() + old_size, pos_buf,
+                static_cast<size_t>(count) * sizeof(uint32_t));
+    std::memcpy(chars.data() + chars.size() - static_cast<size_t>(count),
+                chr_buf, static_cast<size_t>(count));
 }
 
 void scan_avx2(const char* data, size_t len,

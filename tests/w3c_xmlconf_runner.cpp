@@ -153,7 +153,8 @@ void write_junit(const std::string& path,
     }
     f << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     f << "<testsuites name=\"w3c-xmlconf\" tests=\"" << cases.size()
-      << "\" failures=\"" << fail << "\" skipped=\"" << skip << "\">\n";
+      << "\" failures=\"" << fail << "\" skipped=\"" << skip
+      << "\" passes=\"" << pass << "\">\n";
     f << "<testsuite name=\"W3C XML Conformance Suite\">\n";
     for (size_t i = 0; i < cases.size(); ++i) {
         f << "  <testcase classname=\"w3c." << cases[i].type

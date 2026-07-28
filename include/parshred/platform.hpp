@@ -37,6 +37,22 @@
 #define PARSHRED_UNLIKELY(x) (x)
 #define PARSHRED_ALIGNED(n) __declspec(align(n))
 #define PARSHRED_EXPORT __declspec(dllexport)
+
+// MSVC has no __builtin_*; provide portable shims used by the SIMD scanners
+// and the DOM hot paths. <intrin.h> supplies _BitScanForward / _BitScanForward64
+// / __popcnt / _lzcnt_u32. We wrap them in the parshred namespace so callers
+// use parshred::ctz / parshred::ctzll / parshred::popcount / parshred::clz.
+#include <intrin.h>
+namespace parshred {
+    inline int ctz(unsigned x) {
+        unsigned long r; _BitScanForward(&r, x); return static_cast<int>(r);
+    }
+    inline int ctzll(unsigned long long x) {
+        unsigned long r; _BitScanForward64(&r, x); return static_cast<int>(r);
+    }
+    inline int popcount(unsigned x) { return static_cast<int>(__popcnt(x)); }
+    inline int clz(unsigned x) { return static_cast<int>(__lzcnt(x)); }
+}
 #else
 #define PARSHRED_FORCE_INLINE __attribute__((always_inline)) inline
 #define PARSHRED_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -47,6 +63,15 @@
 #else
 #define PARSHRED_EXPORT
 #endif
+
+// GCC/Clang counterparts of the MSVC shims above. Same parshred:: namespace
+// so call sites are compiler-agnostic.
+namespace parshred {
+    inline int ctz(unsigned x)       { return __builtin_ctz(x); }
+    inline int ctzll(unsigned long long x) { return __builtin_ctzll(x); }
+    inline int popcount(unsigned x) { return __builtin_popcount(x); }
+    inline int clz(unsigned x)       { return __builtin_clz(x); }
+}
 #endif
 
 // ── SIMD compile-time detection ──────────────────────────────────────────
