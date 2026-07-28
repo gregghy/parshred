@@ -9,10 +9,17 @@
 #include <iostream>
 #include <sstream>
 
+#if defined(_WIN32)
+// ── Windows implementation: CreateFileMapping / MapViewOfFile ─────────
+#include <windows.h>
+#include <fileapi.h>
+#else
+// ── POSIX implementation: open / mmap / madvise ───────────────────────
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace parshred {
 
@@ -49,6 +56,68 @@ MmapReader& MmapReader::operator=(MmapReader&& other) noexcept {
 void MmapReader::open(const std::string& path) {
     close();
 
+#if defined(_WIN32)
+    // ── Windows path ──────────────────────────────────────────────────
+    // Open the file with read access, then create a file mapping and map
+    // a read-only view. For files under MMAP_THRESHOLD we fall back to a
+    // plain heap buffer (same as POSIX) to avoid mapping overhead.
+    HANDLE h = ::CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                             nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        throw IOError("Failed to open file '" + path + "': Windows error " +
+                      std::to_string(::GetLastError()));
+    }
+
+    LARGE_INTEGER fsz;
+    if (!::GetFileSizeEx(h, &fsz)) {
+        ::CloseHandle(h);
+        throw IOError("Failed to stat file '" + path + "': Windows error " +
+                      std::to_string(::GetLastError()));
+    }
+    size_ = static_cast<size_t>(fsz.QuadPart);
+
+    if (size_ == 0) {
+        ::CloseHandle(h);
+        data_ = nullptr;
+        is_mmap_ = false;
+        is_open_ = true;
+        return;
+    }
+
+    if (size_ < MMAP_THRESHOLD) {
+        buffer_ = std::make_unique<char[]>(size_);
+        DWORD nread = 0;
+        if (!::ReadFile(h, buffer_.get(), static_cast<DWORD>(size_), &nread, nullptr) ||
+            nread != size_) {
+            ::CloseHandle(h);
+            throw IOError("Failed to read file '" + path + "': Windows error " +
+                          std::to_string(::GetLastError()));
+        }
+        size_ = nread;
+        data_ = buffer_.get();
+        is_mmap_ = false;
+        is_open_ = true;
+        ::CloseHandle(h);
+        return;
+    }
+
+    HANDLE mapping = ::CreateFileMappingA(h, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    ::CloseHandle(h);
+    if (!mapping) {
+        throw IOError("Failed to mmap file '" + path + "': Windows error " +
+                      std::to_string(::GetLastError()));
+    }
+    void* mapped = ::MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
+    ::CloseHandle(mapping);
+    if (!mapped) {
+        throw IOError("Failed to mmap file '" + path + "': Windows error " +
+                      std::to_string(::GetLastError()));
+    }
+    data_ = static_cast<const char*>(mapped);
+    is_mmap_ = true;
+    is_open_ = true;
+#else
+    // ── POSIX path ─────────────────────────────────────────────────────
     int fd = ::open(path.c_str(), O_RDONLY);
     if (fd < 0) {
         throw IOError("Failed to open file '" + path + "': " + std::strerror(errno));
@@ -107,6 +176,7 @@ void MmapReader::open(const std::string& path) {
     data_ = static_cast<const char*>(mapped);
     is_mmap_ = true;
     is_open_ = true;
+#endif
 }
 
 void MmapReader::load_buffer(const char* data, size_t size) {
@@ -151,7 +221,11 @@ bool MmapReader::is_open() const noexcept {
 
 void MmapReader::close() noexcept {
     if (is_mmap_ && data_ != nullptr) {
+#if defined(_WIN32)
+        ::UnmapViewOfFile(const_cast<char*>(data_));
+#else
         ::munmap(const_cast<char*>(data_), size_);
+#endif
     }
     data_ = nullptr;
     size_ = 0;
