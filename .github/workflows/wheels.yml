@@ -49,22 +49,21 @@ jobs:
           - os: ubuntu-24.04-arm
             python: cp312
             cibw_arch: aarch64
-          # macOS: build native arch wheels on each runner type.
-          # macos-13 (Intel) → x86_64, macos-14 (Apple Silicon) → arm64.
-          # Native compilation is faster than universal2 cross-compiling and
-          # avoids the poor macos-13 runner availability for universal2 jobs.
-          - os: macos-13
-            python: cp39
-            cibw_arch: x86_64
-          - os: macos-13
-            python: cp312
-            cibw_arch: x86_64
+          # macOS: build on macos-14 (ARM, abundant runner availability).
+          # arm64 is native; x86_64 is cross-compiled via CMAKE_OSX_ARCHITECTURES.
+          # Avoids macos-13 (Intel) runners which have poor availability.
           - os: macos-14
             python: cp39
             cibw_arch: arm64
           - os: macos-14
             python: cp312
             cibw_arch: arm64
+          - os: macos-14
+            python: cp39
+            cibw_arch: x86_64
+          - os: macos-14
+            python: cp312
+            cibw_arch: x86_64
           # Windows: AMD64
           - os: windows-2022
             python: cp39

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-29
+
+### Fixed
+- macOS x86_64 wheels: moved from macos-13 (Intel, poor runner availability)
+  to macos-14 (ARM) with cross-compilation. All macOS wheels now build on
+  macos-14 runners which have abundant availability.
+
 ## [0.1.2] - 2026-07-29
 
 ### Fixed
