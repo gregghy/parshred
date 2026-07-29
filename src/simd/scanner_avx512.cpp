@@ -21,7 +21,7 @@ static inline uint64_t prefix_xor(uint64_t mask) {
 }
 
 static inline void extract_bits_64(uint64_t mask, uint32_t base_offset,
-                                   const char* data,
+                                   const char* PARSHRED_RESTRICT data,
                                    std::vector<uint32_t>& positions,
                                    std::vector<uint8_t>& chars) {
     if (PARSHRED_UNLIKELY(mask == 0)) return;
@@ -51,11 +51,13 @@ static inline void extract_bits_64(uint64_t mask, uint32_t base_offset,
                 chr_buf, static_cast<size_t>(count));
 }
 
-void scan_avx512(const char* data, size_t len,
+void scan_avx512(const char* PARSHRED_RESTRICT data, size_t len,
                  std::vector<uint32_t>& positions,
                  std::vector<uint8_t>& chars)
 {
     const size_t CHUNK = 64;
+    // Prefetch 512 bytes ahead (8 cache lines) to hide DRAM latency.
+    constexpr size_t PREFETCH_DIST = 512;
 
     __m512i v_lt  = _mm512_set1_epi8('<');
     __m512i v_gt  = _mm512_set1_epi8('>');
@@ -70,6 +72,11 @@ void scan_avx512(const char* data, size_t len,
 
     size_t i = 0;
     for (; i + CHUNK <= len; i += CHUNK) {
+        // Software prefetch for large files exceeding L3 cache.
+        if (i + PREFETCH_DIST < len) {
+            PARSHRED_PREFETCH_L2(data + i + PREFETCH_DIST);
+        }
+
         __m512i chunk = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(data + i));
 
         // AVX-512 cmpeq returns a 64-bit mask register directly — no movemask needed!

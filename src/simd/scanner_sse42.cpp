@@ -23,7 +23,7 @@ static inline uint64_t prefix_xor(uint64_t mask) {
 }
 
 static inline void extract_bits(uint32_t mask, uint32_t base_offset,
-                                const char* data,
+                                const char* PARSHRED_RESTRICT data,
                                 std::vector<uint32_t>& positions,
                                 std::vector<uint8_t>& chars) {
     while (mask != 0) {
@@ -35,11 +35,12 @@ static inline void extract_bits(uint32_t mask, uint32_t base_offset,
     }
 }
 
-void scan_sse42(const char* data, size_t len,
+void scan_sse42(const char* PARSHRED_RESTRICT data, size_t len,
                 std::vector<uint32_t>& positions,
                 std::vector<uint8_t>& chars)
 {
     const size_t CHUNK = 16;
+    constexpr size_t PREFETCH_DIST = 256;
 
     // Broadcast each structural character
     __m128i v_lt  = _mm_set1_epi8('<');
@@ -55,6 +56,11 @@ void scan_sse42(const char* data, size_t len,
 
     size_t i = 0;
     for (; i + CHUNK <= len; i += CHUNK) {
+        // Software prefetch for large files exceeding L3 cache.
+        if (i + PREFETCH_DIST < len) {
+            PARSHRED_PREFETCH_L2(data + i + PREFETCH_DIST);
+        }
+
         __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + i));
 
         // Compare for each structural character → 16-bit masks

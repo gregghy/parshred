@@ -17,12 +17,39 @@ option(PARSHRED_BUILD_BENCH  "Build benchmarks"         OFF)
 option(PARSHRED_BUILD_PYTHON "Build Python bindings"    OFF)
 option(PARSHRED_BUILD_CLI    "Build CLI tool"           ON)
 option(PARSHRED_BUILD_FUZZ   "Build libFuzzer harnesses (Clang only)" OFF)
+option(PARSHRED_ENABLE_PGO   "Enable profile-guided optimization (2-stage build)" OFF)
+option(PARSHRED_ENABLE_LTO   "Enable link-time optimization" OFF)
 
 # ── Global compiler flags ─────────────────────────────────────────────
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_compile_options(-O3 -DNDEBUG)
+    endif()
+
+    # ── Profile-Guided Optimization (PGO) ───────────────────────────
+    # Two-stage build:
+    #   1. cmake -DPARSHRED_ENABLE_PGO=ON -DPGO_STAGE=generate ...
+    #      Build instrumented binary, run benchmarks/tests to collect profile.
+    #   2. cmake -DPARSHRED_ENABLE_PGO=ON -DPGO_STAGE=use ...
+    #      Rebuild with profile data for 5-15% speedup on hot paths.
+    if(PARSHRED_ENABLE_PGO)
+        set(PGO_STAGE "use" CACHE STRING "PGO stage: generate or use")
+        if(PGO_STAGE STREQUAL "generate")
+            add_compile_options(-fprofile-generate)
+            add_link_options(-fprofile-generate)
+        elseif(PGO_STAGE STREQUAL "use")
+            add_compile_options(-fprofile-use -fprofile-correction)
+            add_link_options(-fprofile-use -fprofile-correction)
+        endif()
+    endif()
+
+    # ── Link-Time Optimization (LTO) ────────────────────────────────
+    # Enables cross-module inlining and dead code elimination.
+    # 3-8% speedup typical, at the cost of longer link times.
+    if(PARSHRED_ENABLE_LTO)
+        add_compile_options(-flto=auto)
+        add_link_options(-flto=auto)
     endif()
 endif()
 

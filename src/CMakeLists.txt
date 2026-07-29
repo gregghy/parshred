@@ -29,10 +29,15 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
         set(AVX512_FLAGS "/arch:AVX512")
         set(FAST_SAX_FLAGS "/arch:AVX2")
     else()
+        # SSE4.2 + PCLMUL: baseline x86-64 SIMD (2008+)
         set(SSE42_FLAGS "-msse4.2;-mpclmul")
-        set(AVX2_FLAGS "-mavx2;-mpclmul")
-        set(AVX512_FLAGS "-mavx512f;-mavx512bw;-mpclmul")
-        set(FAST_SAX_FLAGS "-mavx2")
+        # AVX2 + PCLMUL + BMI2: Haswell (2013+) — BMI2 (PEXT/PDEP) is available
+        # on all AVX2-capable Intel/AMD CPUs, so we enable it for faster bit ops.
+        set(AVX2_FLAGS "-mavx2;-mpclmul;-mbmi2")
+        # AVX-512 + PCLMUL + BMI2: Skylake-X / Zen 4+
+        set(AVX512_FLAGS "-mavx512f;-mavx512bw;-mpclmul;-mbmi2")
+        # Fused SAX parser uses AVX2 SIMD utils + BMI2
+        set(FAST_SAX_FLAGS "-mavx2;-mbmi2")
     endif()
 
     add_library(parshred_sse42 OBJECT simd/scanner_sse42.cpp)

@@ -33,10 +33,14 @@
 // ── Compiler abstraction ───────────────────────────────────────────────
 #if defined(_MSC_VER)
 #define PARSHRED_FORCE_INLINE __forceinline
-#define PARSHRED_LIKELY(x) (x)
+#define PARSHRED_LIKELY(x)   (x)
 #define PARSHRED_UNLIKELY(x) (x)
-#define PARSHRED_ALIGNED(n) __declspec(align(n))
-#define PARSHRED_EXPORT __declspec(dllexport)
+#define PARSHRED_ALIGNED(n)  __declspec(align(n))
+#define PARSHRED_EXPORT      __declspec(dllexport)
+#define PARSHRED_RESTRICT    __restrict
+// MSVC has no __builtin_prefetch; use the intrinsic equivalent.
+#define PARSHRED_PREFETCH_L2(ptr) _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T2)
+#define PARSHRED_PREFETCH_L1(ptr) _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0)
 
 // MSVC has no __builtin_*; provide portable shims used by the SIMD scanners
 // and the DOM hot paths. <intrin.h> supplies _BitScanForward / _BitScanForward64
@@ -52,12 +56,25 @@ namespace parshred {
     }
     inline int popcount(unsigned x) { return static_cast<int>(__popcnt(x)); }
     inline int clz(unsigned x) { return static_cast<int>(__lzcnt(x)); }
+
+    // BMI2 PEXT/PDEP shims — MSVC provides _pext_u64/_pdep_u64 in <intrin.h>.
+    // These require BMI2 at runtime; callers must guard with cpu_has_bmi2().
+    // MSVC always declares them in <intrin.h> regardless of /arch setting.
+    inline unsigned int pext_u32(unsigned int src, unsigned int mask) {
+        return _pext_u32(src, mask);
+    }
+    inline unsigned long long pext_u64(unsigned long long src, unsigned long long mask) {
+        return _pext_u64(src, mask);
+    }
 }
 #else
 #define PARSHRED_FORCE_INLINE __attribute__((always_inline)) inline
-#define PARSHRED_LIKELY(x) __builtin_expect(!!(x), 1)
+#define PARSHRED_LIKELY(x)   __builtin_expect(!!(x), 1)
 #define PARSHRED_UNLIKELY(x) __builtin_expect(!!(x), 0)
-#define PARSHRED_ALIGNED(n) __attribute__((aligned(n)))
+#define PARSHRED_ALIGNED(n)  __attribute__((aligned(n)))
+#define PARSHRED_RESTRICT    __restrict__
+#define PARSHRED_PREFETCH_L2(ptr) __builtin_prefetch((ptr), 0, 2)
+#define PARSHRED_PREFETCH_L1(ptr) __builtin_prefetch((ptr), 0, 3)
 #if defined(__GNUC__) && (__GNUC__ >= 4)
 #define PARSHRED_EXPORT __attribute__((visibility("default")))
 #else
@@ -71,7 +88,32 @@ namespace parshred {
     inline int ctzll(unsigned long long x) { return __builtin_ctzll(x); }
     inline int popcount(unsigned x) { return __builtin_popcount(x); }
     inline int clz(unsigned x)       { return __builtin_clz(x); }
+
+    // BMI2 PEXT/PDEP — available on Haswell+ (2013+). Callers must guard
+    // with cpu_has_bmi2() at runtime, and the translation unit must be
+    // compiled with -mbmi2 (or the functions will not be available).
+#if defined(__BMI2__)
+#if __has_include(<immintrin.h>)
+#include <immintrin.h>
+#endif
+    inline unsigned int pext_u32(unsigned int src, unsigned int mask) {
+        return _pext_u32(src, mask);
+    }
+    inline unsigned long long pext_u64(unsigned long long src, unsigned long long mask) {
+        return _pext_u64(src, mask);
+    }
+#endif
 }
+#endif
+
+// ── Assume-aligned helper ──────────────────────────────────────────────
+// Tells the compiler that `ptr` is aligned to `n` bytes, enabling aligned
+// load instructions (_mm_load_si128 instead of _mm_loadu_si128).
+#if defined(_MSC_VER)
+#define PARSHRED_ASSUME_ALIGNED(ptr, n) (ptr)
+#else
+#define PARSHRED_ASSUME_ALIGNED(ptr, n) \
+    static_cast<decltype(ptr)>(__builtin_assume_aligned((ptr), (n)))
 #endif
 
 // ── SIMD compile-time detection ──────────────────────────────────────────
@@ -261,6 +303,20 @@ inline bool cpu_has_avx512() {
 #endif
 }
 
+/// Returns true if the CPU supports BMI2 (PEXT/PDEP instructions).
+/// Available on Intel Haswell (2013) and AMD Zen 2 (2019)+.
+inline bool cpu_has_bmi2() {
+#if PARSHRED_CPUID_AVAILABLE
+#if PARSHRED_WINDOWS
+    return detail::cpuid_bit(7, 0, 1, 8);
+#else
+    return __builtin_cpu_supports("bmi2");
+#endif
+#else
+    return false;
+#endif
+}
+
 // ── Memory-mapped file ─────────────────────────────────────────────────
 
 /// A portable read-only memory-mapped file.
@@ -377,10 +433,21 @@ public:
         MappedFile mf;
         mf.size_ = static_cast<size_t>(st.st_size);
         if (mf.size_ > 0) {
-            void* addr = ::mmap(nullptr, mf.size_, PROT_READ, MAP_PRIVATE, fd.fd, 0);
+            // MAP_POPULATE pre-faults all pages, avoiding page-fault storms
+            // during parsing of large files. MADV_HUGEPAGE requests THP
+            // coalescing to reduce TLB pressure.
+            int flags = MAP_PRIVATE;
+#ifdef MAP_POPULATE
+            flags |= MAP_POPULATE;
+#endif
+            void* addr = ::mmap(nullptr, mf.size_, PROT_READ, flags, fd.fd, 0);
             if (addr == MAP_FAILED) {
                 throw std::runtime_error(detail::make_platform_error(path));
             }
+            ::madvise(addr, mf.size_, MADV_SEQUENTIAL);
+#ifdef MADV_HUGEPAGE
+            ::madvise(addr, mf.size_, MADV_HUGEPAGE);
+#endif
             mf.data_ = static_cast<const char*>(addr);
         }
         return mf;

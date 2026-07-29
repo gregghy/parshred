@@ -162,16 +162,31 @@ void MmapReader::open(const std::string& path) {
         return;
     }
 
-    // mmap the file
-    void* mapped = ::mmap(nullptr, size_, PROT_READ, MAP_PRIVATE, fd, 0);
+    // mmap the file. Use MAP_POPULATE to pre-fault pages — this avoids
+    // thousands of page faults during parsing, which is critical for
+    // large files (>1 MB). The upfront cost is amortized over the scan.
+    // MAP_HUGETLB is not used because it requires huge page reservation
+    // and can fail silently; we use madvise(MADV_HUGEPAGE) instead to
+    // let the kernel coalesce pages into transparent huge pages (THP).
+    int flags = MAP_PRIVATE;
+#ifdef MAP_POPULATE
+    flags |= MAP_POPULATE;
+#endif
+    void* mapped = ::mmap(nullptr, size_, PROT_READ, flags, fd, 0);
     ::close(fd);
 
     if (mapped == MAP_FAILED) {
         throw IOError("Failed to mmap file '" + path + "': " + std::strerror(errno));
     }
 
-    // Advise the kernel that we'll read sequentially
+    // Advise the kernel that we'll read sequentially (read-ahead prefetch)
     ::madvise(mapped, size_, MADV_SEQUENTIAL);
+    // Request transparent huge pages to reduce TLB misses on large files.
+    // The kernel may ignore this if THP is disabled system-wide, but it's
+    // a no-op cost hint that helps when available.
+#ifdef MADV_HUGEPAGE
+    ::madvise(mapped, size_, MADV_HUGEPAGE);
+#endif
 
     data_ = static_cast<const char*>(mapped);
     is_mmap_ = true;

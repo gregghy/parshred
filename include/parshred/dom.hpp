@@ -46,33 +46,37 @@ enum NodeFlags : uint8_t {
 
 // ── XmlNode ──────────────────────────────────────────────────────────
 
-/// Compact DOM node. 64 bytes to align nicely on cache lines.
+/// Compact DOM node. Exactly 64 bytes — one cache line.
 ///
 /// Children are a linked list: first_child → next_sibling → next_sibling → ...
 /// Attributes are a separate linked list: first_attr → next_sibling → ...
+///
+/// `parent` and `last_child` are NOT stored in the node (they're only needed
+/// during parsing, so they're tracked on the parse stack). This saves 16
+/// bytes per node, fitting exactly one cache line instead of straddling two.
 ///
 /// All string_views point into either:
 ///   - The original (possibly mutated) input buffer (in-situ mode)
 ///   - Arena-allocated storage (arena mode, for expanded entities)
 struct XmlNode {
-    // ── Data ─────────────────────────────── (40 bytes)
+    // ── Data ─────────────────────────────── (36 bytes)
     std::string_view name{};        // 16 bytes: tag name or attr name
     std::string_view value{};       // 16 bytes: text content or attr value
     NodeType         type{};        //  1 byte
     uint8_t          flags{};       //  1 byte
     uint16_t         _pad0{};       //  2 bytes padding
-    uint32_t         _pad1{};       //  4 bytes padding
+    uint32_t         _pad1{};       //  4 bytes padding (fills alignment gap before pointers)
 
-    // ── Tree links ───────────────────────── (24 bytes)
-    XmlNode*         parent{};      //  8 bytes
+    // ── Tree links ───────────────────────── (16 bytes)
     XmlNode*         first_child{}; //  8 bytes
-    XmlNode*         last_child{};  //  8 bytes (O(1) append)
-
-    // ── Sibling/attr links ───────────────── (16 bytes)
     XmlNode*         next_sibling{}; // 8 bytes
+
+    // ── Attribute link ────────────────────── (8 bytes)
     XmlNode*         first_attr{};   // 8 bytes (first attribute node)
 
-    // Total: 80 bytes (slightly over one cache line, acceptable)
+    // Total: 64 bytes — exactly one cache line.
+    // No alignas(64) needed: NodePool pages are 64-byte aligned, and
+    // 64-byte nodes naturally fall on cache line boundaries within them.
 
     // ── Convenience ──────────────────────────
     [[nodiscard]] bool is_element() const noexcept { return type == NodeType::Element; }
@@ -81,7 +85,7 @@ struct XmlNode {
     [[nodiscard]] bool has_attrs() const noexcept { return first_attr != nullptr; }
 };
 
-static_assert(sizeof(XmlNode) == 80, "XmlNode should be 80 bytes");
+static_assert(sizeof(XmlNode) == 64, "XmlNode should be 64 bytes (one cache line)");
 
 // ── Document ─────────────────────────────────────────────────────────
 

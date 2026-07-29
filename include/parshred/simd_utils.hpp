@@ -19,12 +19,9 @@ namespace parshred {
 
 /// Skip whitespace starting at `pos`, return first non-whitespace position.
 /// Falls back to scalar when fewer than 32 bytes remain.
-inline size_t skip_whitespace_fast(const char* data, size_t pos, size_t len) noexcept {
+inline size_t skip_whitespace_fast(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     // Whitespace: 0x09 (\t), 0x0A (\n), 0x0D (\r), 0x20 (space)
-    // All <= 0x20 and specifically those 4 values.
-    // Fast check: compare each byte against ' ' (0x20). If <= 0x20, check exact.
-    // Even faster: just check if any byte is NOT whitespace.
     const __m256i v_space = _mm256_set1_epi8(' ');
     const __m256i v_tab   = _mm256_set1_epi8('\t');
     const __m256i v_nl    = _mm256_set1_epi8('\n');
@@ -59,7 +56,7 @@ inline size_t skip_whitespace_fast(const char* data, size_t pos, size_t len) noe
 /// Read a name starting at `pos`. Returns position past the last name char.
 /// Uses SIMD vpshufb-based classification for 32 bytes at a time,
 /// with scalar fallback for the tail.
-inline size_t read_name_fast(const char* data, size_t pos, size_t len) noexcept {
+inline size_t read_name_fast(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
     if (pos >= len || !is_name_start(data[pos])) return pos;
     ++pos;
 
@@ -159,7 +156,7 @@ inline size_t read_name_fast(const char* data, size_t pos, size_t len) noexcept 
 
 /// Find the position of a character in data[pos..len), or return len if not found.
 /// Uses SIMD to scan 32 bytes at a time.
-inline size_t find_char_fast(const char* data, size_t pos, size_t len, char target) noexcept {
+inline size_t find_char_fast(const char* PARSHRED_RESTRICT data, size_t pos, size_t len, char target) noexcept {
 #ifdef __AVX2__
     const __m256i v_target = _mm256_set1_epi8(target);
     while (pos + 32 <= len) {
@@ -178,7 +175,7 @@ inline size_t find_char_fast(const char* data, size_t pos, size_t len, char targ
 
 /// Find the position of a character that is NOT a text character (i.e., find '<' or '&').
 /// This is the hot loop for skipping text content between tags.
-inline size_t skip_text_fast(const char* data, size_t pos, size_t len) noexcept {
+inline size_t skip_text_fast(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     const __m256i v_lt  = _mm256_set1_epi8('<');
     const __m256i v_amp = _mm256_set1_epi8('&');
@@ -201,7 +198,7 @@ inline size_t skip_text_fast(const char* data, size_t pos, size_t len) noexcept 
 }
 
 /// Skip text content in turbo mode (no entity detection — only stop at '<').
-inline size_t skip_text_turbo(const char* data, size_t pos, size_t len) noexcept {
+inline size_t skip_text_turbo(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     const __m256i v_lt = _mm256_set1_epi8('<');
     while (pos + 32 <= len) {
@@ -219,12 +216,12 @@ inline size_t skip_text_turbo(const char* data, size_t pos, size_t len) noexcept
 }
 
 /// Find the end of a quoted attribute value. Scans for the closing quote char.
-inline size_t skip_attr_value(const char* data, size_t pos, size_t len, char quote) noexcept {
+inline size_t skip_attr_value(const char* PARSHRED_RESTRICT data, size_t pos, size_t len, char quote) noexcept {
     return find_char_fast(data, pos, len, quote);
 }
 
 /// Find pattern "-->" starting at pos. Returns position of '-' or len if not found.
-inline size_t find_comment_end(const char* data, size_t pos, size_t len) noexcept {
+inline size_t find_comment_end(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     const __m256i v_dash = _mm256_set1_epi8('-');
     while (pos + 34 <= len) {  // need 3 chars for "-->"
@@ -250,7 +247,7 @@ inline size_t find_comment_end(const char* data, size_t pos, size_t len) noexcep
 }
 
 /// Find pattern "]]>" starting at pos.
-inline size_t find_cdata_end(const char* data, size_t pos, size_t len) noexcept {
+inline size_t find_cdata_end(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     const __m256i v_bracket = _mm256_set1_epi8(']');
     while (pos + 34 <= len) {
@@ -276,7 +273,7 @@ inline size_t find_cdata_end(const char* data, size_t pos, size_t len) noexcept 
 }
 
 /// Find "?>" starting at pos.
-inline size_t find_pi_end(const char* data, size_t pos, size_t len) noexcept {
+inline size_t find_pi_end(const char* PARSHRED_RESTRICT data, size_t pos, size_t len) noexcept {
 #ifdef __AVX2__
     const __m256i v_q = _mm256_set1_epi8('?');
     while (pos + 33 <= len) {

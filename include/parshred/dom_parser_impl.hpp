@@ -111,18 +111,29 @@ DomParseResult dom_parse(char* data, size_t len) {
     XmlNode* doc_node = result.doc.document_node();
     XmlNode* current = doc_node;  // Current parent node
 
+    // Parse stack: tracks parent + last_child for O(1) child append.
+    // These were previously stored in XmlNode (parent, last_child fields)
+    // but moved here to shrink XmlNode to 64 bytes (one cache line).
+    // Most XML documents have shallow nesting (<32 levels), so a small
+    // inline stack avoids heap allocation in the common case.
+    struct StackEntry {
+        XmlNode* parent;
+        XmlNode* last_child;
+    };
+    StackEntry stack_buf[64];  // 64 levels deep — covers >99.99% of XML
+    int stack_depth = 0;
+    XmlNode* last_child = nullptr;  // last child of `current`
+
     size_t pos = 0;
 
     // Helper: append a child to current parent
     auto append_child = [&](XmlNode* child) {
-        child->parent = current;
-        if (current->last_child) {
-            current->last_child->next_sibling = child;
-            current->last_child = child;
+        if (last_child) {
+            last_child->next_sibling = child;
         } else {
             current->first_child = child;
-            current->last_child = child;
         }
+        last_child = child;
     };
 
     // Track last attribute for O(1) append (local to current element)
@@ -130,7 +141,6 @@ DomParseResult dom_parse(char* data, size_t len) {
 
     // Helper: append an attribute to a node
     auto append_attr = [&](XmlNode* elem, XmlNode* attr) {
-        attr->parent = elem;
         if (!last_attr) {
             elem->first_attr = attr;
         } else {
@@ -187,8 +197,15 @@ DomParseResult dom_parse(char* data, size_t len) {
             while (pos < len && data[pos] != '>') ++pos;
             if (pos < len) ++pos;
 
-            // Pop up to parent
-            current = current->parent ? current->parent : doc_node;
+            // Pop the parse stack to restore parent + last_child
+            if (PARSHRED_LIKELY(stack_depth > 0)) {
+                --stack_depth;
+                current = stack_buf[stack_depth].parent;
+                last_child = stack_buf[stack_depth].last_child;
+            } else {
+                current = doc_node;
+                last_child = nullptr;
+            }
             continue;
         }
 
@@ -363,9 +380,15 @@ DomParseResult dom_parse(char* data, size_t len) {
             }
 
             if (!self_closing) {
-                // Push: this element becomes the new parent
+                // Push: this element becomes the new parent.
+                // Save current parent + last_child on the parse stack.
                 elem->flags |= NF_HAS_CHILDREN;
+                if (PARSHRED_LIKELY(stack_depth < 64)) {
+                    stack_buf[stack_depth] = {current, last_child};
+                    ++stack_depth;
+                }
                 current = elem;
+                last_child = nullptr;
             }
         }
     }

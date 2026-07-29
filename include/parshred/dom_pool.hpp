@@ -61,9 +61,11 @@ public:
     NodePool(NodePool&& o) noexcept
         : pages_(std::move(o.pages_)),
           current_page_(o.current_page_),
+          current_page_idx_(o.current_page_idx_),
           offset_(o.offset_),
           total_nodes_(o.total_nodes_) {
         o.current_page_ = nullptr;
+        o.current_page_idx_ = 0;
         o.offset_ = NODES_PER_PAGE;
         o.total_nodes_ = 0;
     }
@@ -73,9 +75,11 @@ public:
             for (auto* p : pages_) parshred::aligned_free(p);
             pages_ = std::move(o.pages_);
             current_page_ = o.current_page_;
+            current_page_idx_ = o.current_page_idx_;
             offset_ = o.offset_;
             total_nodes_ = o.total_nodes_;
             o.current_page_ = nullptr;
+            o.current_page_idx_ = 0;
             o.offset_ = NODES_PER_PAGE;
             o.total_nodes_ = 0;
         }
@@ -125,6 +129,7 @@ public:
                 }
             }
             current_page_ = pages_[0];
+            current_page_idx_ = 0;
             offset_ = 0;
             total_nodes_ = 0;
         }
@@ -133,24 +138,17 @@ public:
 private:
     std::vector<XmlNode*> pages_;
     XmlNode* current_page_ = nullptr;
+    size_t current_page_idx_ = 0;  // O(1) grow: index of current page
     size_t offset_ = NODES_PER_PAGE;  // Force initial grow
     size_t total_nodes_ = 0;
 
     void grow() {
-        // Check if we have a pre-allocated page to reuse
-        size_t next_page_idx = 0;
-        if (current_page_ && !pages_.empty()) {
-            for (size_t i = 0; i < pages_.size(); ++i) {
-                if (pages_[i] == current_page_) {
-                    next_page_idx = i + 1;
-                    break;
-                }
-            }
-            if (next_page_idx < pages_.size()) {
-                current_page_ = pages_[next_page_idx];
-                offset_ = 0;
-                return;
-            }
+        // O(1) page advance: check if the next pre-allocated page exists.
+        if (current_page_idx_ + 1 < pages_.size()) {
+            ++current_page_idx_;
+            current_page_ = pages_[current_page_idx_];
+            offset_ = 0;
+            return;
         }
 
         // Allocate new page (aligned for cache efficiency).
@@ -163,6 +161,7 @@ private:
         std::memset(raw, 0, PAGE_SIZE);
         current_page_ = static_cast<XmlNode*>(raw);
         pages_.push_back(current_page_);
+        current_page_idx_ = pages_.size() - 1;
         offset_ = 0;
     }
 };
