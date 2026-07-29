@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-29
+
+### Changed
+- Expanded PyPI metadata: added per-Python-version classifiers (3.9–3.13),
+  OS classifiers (Linux/macOS/Windows), Intended Audience, and more
+  keywords (rapidxml, lxml, avx2, sse4, neon, xmlparser, etc.) to improve
+  discoverability on PyPI search and classifier browsing.
+
 ## [0.1.5] - 2026-07-29
 
 ### Fixed

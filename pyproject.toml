@@ -4,19 +4,31 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "parshred"
-version = "0.1.5"
+version = "0.1.6"
 description = "High-performance SIMD-accelerated XML parser"
 readme = "README.md"
 license = {text = "AGPL-3.0-or-later"}
 requires-python = ">=3.9"
 authors = [{name = "Parshred Contributors"}]
-keywords = ["xml", "parser", "simd", "dom", "sax", "xpath", "fast", "performance"]
+keywords = ["xml", "parser", "simd", "dom", "sax", "xpath", "fast", "performance", "avx2", "sse4", "neon", "rapidxml", "lxml", "xmlparser", "high-performance", "c++"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing :: Markup :: XML",
+    "Topic :: Text Processing :: Markup",
 ]
 
 [project.urls]
