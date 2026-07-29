@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-29
+
+### Fixed
+- macOS wheel builds: replaced universal2 cross-compilation (which queued
+  indefinitely on scarce macos-13 Intel runners) with native arch-native
+  wheels — x86_64 on macos-13, arm64 on macos-14. Faster builds and better
+  runner availability.
+
 ## [0.1.1] - 2026-07-29
 
 ### Added
