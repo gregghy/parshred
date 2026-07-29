@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "parshred"
-version = "0.1.4"
+version = "0.1.5"
 description = "High-performance SIMD-accelerated XML parser"
 readme = "README.md"
 license = {text = "AGPL-3.0-or-later"}

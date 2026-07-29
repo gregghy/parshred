@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-29
+
+### Fixed
+- macOS cp39 x86_64 cross-compilation: Python 3.9's x86_64 framework
+  defaults to `-mmacosx-version-min=10.9`, but `std::variant` (used in
+  `xpath.hpp`) requires macOS 10.13+. Set `MACOSX_DEPLOYMENT_TARGET=10.15`
+  to fix the build. cibuildwheel overrides this to 11.0 for arm64.
+
 ## [0.1.4] - 2026-07-29
 
 ### Fixed

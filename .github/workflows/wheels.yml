@@ -97,8 +97,11 @@ jobs:
           CIBW_CONFIG_SETTINGS: "cmake.args=-DPARSHRED_BUILD_PYTHON=ON;-DPARSHRED_BUILD_TESTS=OFF;-DPARSHRED_BUILD_BENCH=OFF;-DPARSHRED_BUILD_CLI=OFF"
           # Test the wheel in an isolated env with a smoke check.
           CIBW_TEST_COMMAND: "python -c \"import parshred; d=parshred.parse('<a><b x=\\\"1\\\">t</b></a>'); assert d.root.name=='a'; assert d.root.children[0].attr('x')=='1'; print('wheel smoke OK')\""
-          # Let cibuildwheel pick MACOSX_DEPLOYMENT_TARGET per-arch
-          # (10.15 for x86_64, 11.0 for arm64).
+          # Python 3.9's x86_64 framework defaults to macOS 10.9, but
+          # std::variant (used in xpath.hpp) requires 10.13+. Set 10.15 as
+          # the minimum deployment target. cibuildwheel overrides this to
+          # 11.0 for arm64 (which requires it).
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
         run: |
           python -m cibuildwheel --output-dir wheelhouse
 
