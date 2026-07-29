@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-29
+
+### Fixed
+- macOS wheel matrix: GitHub Actions was corrupting `cibw_arch` on duplicate
+  `os`+`python` matrix entries, causing some jobs to build the wrong arch.
+  Consolidated to a single macOS job per Python version that builds both
+  arm64 (native) and x86_64 (cross-compiled) via `CIBW_ARCHS_MACOS`.
+
 ## [0.1.3] - 2026-07-29
 
 ### Fixed

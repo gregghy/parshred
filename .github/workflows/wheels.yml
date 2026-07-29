@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build-wheels:
-    name: Wheel ${{ matrix.os }} py${{ matrix.python }}
+    name: Wheel ${{ matrix.os }} py${{ matrix.python }} ${{ matrix.cibw_arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,21 +49,15 @@ jobs:
           - os: ubuntu-24.04-arm
             python: cp312
             cibw_arch: aarch64
-          # macOS: build on macos-14 (ARM, abundant runner availability).
-          # arm64 is native; x86_64 is cross-compiled via CMAKE_OSX_ARCHITECTURES.
-          # Avoids macos-13 (Intel) runners which have poor availability.
+          # macOS: single job per Python version builds both arm64 (native)
+          # and x86_64 (cross-compiled) on macos-14. Avoids macos-13 runner
+          # availability issues and prevents duplicate matrix entries.
           - os: macos-14
             python: cp39
-            cibw_arch: arm64
+            cibw_arch: macos
           - os: macos-14
             python: cp312
-            cibw_arch: arm64
-          - os: macos-14
-            python: cp39
-            cibw_arch: x86_64
-          - os: macos-14
-            python: cp312
-            cibw_arch: x86_64
+            cibw_arch: macos
           # Windows: AMD64
           - os: windows-2022
             python: cp39
@@ -91,7 +85,10 @@ jobs:
           # Pin to one Python tag per job (matrix.python) to keep jobs isolated.
           CIBW_BUILD: "${{ matrix.python }}-*"
           CIBW_ARCHS_LINUX: "${{ matrix.cibw_arch }}"
-          CIBW_ARCHS_MACOS: "${{ matrix.cibw_arch }}"
+          # macOS: build both arm64 (native) and x86_64 (cross-compiled) in
+          # a single job on macos-14. The matrix.cibw_arch for macOS entries
+          # is "macos" (a label, not a real arch) — override it here.
+          CIBW_ARCHS_MACOS: ${{ matrix.cibw_arch == 'macos' && 'arm64 x86_64' || matrix.cibw_arch }}
           CIBW_ARCHS_WINDOWS: "${{ matrix.cibw_arch }}"
           # manylinux2014 = glibc 2.17 (RHEL 8 / Ubuntu 18.04+). Broadest compat.
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
