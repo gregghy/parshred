@@ -1,11 +1,11 @@
 # CLA Assistant configuration.
 # Docs: https://github.com/cla-assistant/cla-assistant
 # This file is consumed by the CLA Assistant GitHub App when installed on
-# the parshred/parshred repository.
+# the gregghy/parshred repository.
 
 # The CLA text users see and agree to. Hosted in-repo so the version they
 # sign is the version we ship.
-url: https://github.com/parshred/parshred/blob/main/docs/cla/CLA-INDIVIDUAL.md
+url: https://github.com/gregghy/parshred/blob/main/docs/cla/CLA.md
 
 # Require a CLA signature on every pull request, including drafts.
 # (Set to false to allow draft PRs without a CLA.)

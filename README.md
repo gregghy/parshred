@@ -1,6 +1,6 @@
 # Parshred
 
-[![CI](https://github.com/parshred/parshred/actions/workflows/ci.yml/badge.svg)](https://github.com/parshred/parshred/actions/workflows/ci.yml)
+[![CI](https://github.com/gregghy/parshred/actions/workflows/ci.yml/badge.svg)](https://github.com/gregghy/parshred/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/)
 
@@ -81,7 +81,7 @@ into `string_view` ranges with no per-node allocation.
 ```cmake
 include(FetchContent)
 FetchContent_Declare(parshred
-    GIT_REPOSITORY https://github.com/parshred/parshred.git
+    GIT_REPOSITORY https://github.com/gregghy/parshred.git
     GIT_TAG v0.1.0
 )
 FetchContent_MakeAvailable(parshred)
@@ -91,7 +91,7 @@ target_link_libraries(myapp PRIVATE parshred::parshred)
 ### Build from Source
 
 ```bash
-git clone https://github.com/parshred/parshred.git
+git clone https://github.com/gregghy/parshred.git
 cd parshred
 cmake --preset release
 cmake --build build/release
