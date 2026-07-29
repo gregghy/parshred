@@ -20,10 +20,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/parshred/parshred"
-Repository = "https://github.com/parshred/parshred"
-Documentation = "https://github.com/parshred/parshred/blob/main/docs"
-Issues = "https://github.com/parshred/parshred/issues"
+Homepage = "https://github.com/gregghy/parshred"
+Repository = "https://github.com/gregghy/parshred"
+Documentation = "https://github.com/gregghy/parshred/blob/main/docs"
+Issues = "https://github.com/gregghy/parshred/issues"
 
 [tool.scikit-build]
 cmake.args = ["-DPARSHRED_BUILD_PYTHON=ON", "-DPARSHRED_BUILD_TESTS=OFF", "-DPARSHRED_BUILD_BENCH=OFF", "-DPARSHRED_BUILD_CLI=OFF"]

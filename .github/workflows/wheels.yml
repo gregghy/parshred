@@ -25,7 +25,7 @@ jobs:
         # Build one wheel per OS × Python minor. cibuildwheel handles the
         # CPython/PyPy ABI tags automatically.
         include:
-          # Linux: manylinux2014 x86-64 (broadest glibc compat) + aarch64
+          # Linux x86-64: manylinux2014 (broadest glibc compat)
           - os: ubuntu-24.04
             python: cp39
             cibw_arch: x86_64
@@ -41,10 +41,12 @@ jobs:
           - os: ubuntu-24.04
             python: cp313
             cibw_arch: x86_64
-          - os: ubuntu-24.04
+          # Linux aarch64: native ARM runner (no QEMU — ~10x faster than
+          # cross-compiling under emulation, which previously timed out at 6h).
+          - os: ubuntu-24.04-arm
             python: cp39
             cibw_arch: aarch64
-          - os: ubuntu-24.04
+          - os: ubuntu-24.04-arm
             python: cp312
             cibw_arch: aarch64
           # macOS: universal2 covers Intel + Apple Silicon
